@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>PIXELCAM</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #121218;
+    --panel: #1b1b26;
+    --panel-hi: #24242f;
+    --ink: #e9e7f5;
+    --ink-dim: #8d8aa3;
+    --green: #9bbc0f;
+    --green-dim: #4a5f08;
+    --amber: #ffb000;
+    --pink: #ff2e6c;
+    --line: #34324a;
+  }
+  *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body{
+    margin:0; padding:0; height:100%;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'VT323', monospace;
+    overscroll-behavior: none;
+  }
+  body{
+    display:flex; flex-direction:column; align-items:center;
+    min-height:100%;
+    padding: 14px 12px 22px;
+  }
+  .pixelfont{ font-family:'Press Start 2P', monospace; }
+
+  header{
+    width:100%; max-width:480px;
+    display:flex; align-items:baseline; justify-content:space-between;
+    padding: 4px 6px 12px;
+  }
+  header .title{
+    font-size: 15px;
+    color: var(--green);
+    letter-spacing: 1px;
+    text-shadow: 2px 2px 0 var(--green-dim);
+  }
+  header .sub{
+    font-size: 15px;
+    color: var(--ink-dim);
+  }
+
+  .stage{
+    position: relative;
+    width: 100%; max-width: 480px;
+    aspect-ratio: 4 / 3;
+    background: #000;
+    clip-path: polygon(16px 0, calc(100% - 16px) 0, 100% 16px, 100% calc(100% - 16px), calc(100% - 16px) 100%, 16px 100%, 0 calc(100% - 16px), 0 16px);
+    box-shadow: 0 0 0 3px var(--panel), 0 0 0 6px var(--line), 0 10px 30px rgba(0,0,0,.55);
+    overflow: hidden;
+    transition: aspect-ratio .2s ease;
+  }
+  #view{
+    position:absolute; inset:0;
+    width:100%; height:100%;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    display:block;
+  }
+  .scanlines{
+    position:absolute; inset:0;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,0) 0px,
+      rgba(0,0,0,0) 1px,
+      rgba(0,0,0,0.18) 2px,
+      rgba(0,0,0,0.18) 3px
+    );
+    mix-blend-mode: multiply;
+    pointer-events:none;
+  }
+  .vignette{
+    position:absolute; inset:0;
+    box-shadow: inset 0 0 60px 18px rgba(0,0,0,.55);
+    pointer-events:none;
+  }
+  .hud{
+    position:absolute; inset:0; pointer-events:none;
+    font-family:'Press Start 2P', monospace;
+    font-size: 8px;
+    color: var(--green);
+    text-shadow: 1px 1px 0 rgba(0,0,0,.8);
+  }
+  .hud .tl{ position:absolute; top:8px; left:10px; display:flex; align-items:center; gap:6px;}
+  .hud .tr{ position:absolute; top:8px; right:10px; }
+  .hud .bl{ position:absolute; bottom:8px; left:10px; }
+  .hud .br{ position:absolute; bottom:8px; right:10px; }
+  .dot{
+    width:6px; height:6px; border-radius:50%;
+    background: var(--pink);
+    box-shadow: 0 0 4px var(--pink);
+    animation: blink 1.1s steps(2,jump-none) infinite;
+  }
+  @keyframes blink{ 50%{ opacity:.15; } }
+
+  .overlay-msg{
+    position:absolute; inset:0;
+    display:flex; align-items:center; justify-content:center;
+    background: rgba(10,10,14,.92);
+    text-align:center; padding: 24px;
+    font-size: 18px; color: var(--ink);
+    z-index: 5;
+  }
+  .overlay-msg .box{ max-width: 320px; }
+  .overlay-msg .pixelfont{ font-size:11px; color: var(--amber); display:block; margin-bottom:14px; line-height:1.6; }
+  .overlay-msg button{ margin-top: 16px; }
+
+  .deck{
+    width:100%; max-width:480px;
+    margin-top: 14px;
+    background: var(--panel);
+    border: 2px solid var(--line);
+    clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 10px, 100% calc(100% - 10px), calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 10px), 0 10px);
+    padding: 14px 14px 16px;
+  }
+
+  .row-label{
+    font-family:'Press Start 2P', monospace;
+    font-size: 9px;
+    color: var(--ink-dim);
+    margin-bottom: 8px;
+    letter-spacing: .5px;
+  }
+
+  .palette-row{
+    display:grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    margin-bottom: 14px;
+  }
+  .pbtn{
+    font-family:'VT323', monospace;
+    font-size: 14px;
+    line-height: 1.05;
+    color: var(--ink);
+    background: var(--panel-hi);
+    border: 2px solid var(--line);
+    padding: 7px 3px;
+    clip-path: polygon(6px 0, calc(100% - 6px) 0, 100% 6px, 100% calc(100% - 6px), calc(100% - 6px) 100%, 6px 100%, 0 calc(100% - 6px), 0 6px);
+    cursor:pointer;
+  }
+  .pbtn.active{
+    background: var(--green-dim);
+    color: var(--green);
+    border-color: var(--green);
+    box-shadow: 0 0 8px rgba(155,188,15,.35) inset;
+  }
+  .pbtn .swatch{
+    display:block;
+    width:100%; height:9px;
+    margin-bottom:5px;
+    border: 1px solid rgba(0,0,0,.4);
+  }
+
+  .slider-row{ margin-bottom: 14px; }
+  .slider-row .row-label{ display:flex; justify-content:space-between; }
+  input[type=range]{
+    -webkit-appearance:none; appearance:none;
+    width:100%; height: 18px;
+    background: transparent;
+  }
+  input[type=range]::-webkit-slider-runnable-track{
+    height: 8px;
+    background: #0d0d12;
+    border: 2px solid var(--line);
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;
+    width: 18px; height: 18px;
+    background: var(--amber);
+    border: 2px solid #6b4d00;
+    margin-top: -7px;
+  }
+  input[type=range]::-moz-range-track{
+    height: 8px; background:#0d0d12; border: 2px solid var(--line);
+  }
+  input[type=range]::-moz-range-thumb{
+    width: 16px; height:16px; background: var(--amber); border: 2px solid #6b4d00; border-radius:0;
+  }
+
+  .button-row{
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .action-btn{
+    font-family:'Press Start 2P', monospace;
+    font-size: 10px;
+    color: #0d0d12;
+    background: var(--green);
+    border: none;
+    padding: 14px 6px;
+    clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 8px, 100% calc(100% - 8px), calc(100% - 8px) 100%, 8px 100%, 0 calc(100% - 8px), 0 8px);
+    cursor:pointer;
+    letter-spacing: .5px;
+  }
+  .action-btn:active{ transform: translateY(1px); }
+  .action-btn.secondary{
+    background: var(--panel-hi);
+    color: var(--ink);
+    border: 2px solid var(--line);
+  }
+  .action-btn:disabled{ opacity:.4; }
+
+  .flash{
+    position:fixed; inset:0; background:#fff; opacity:0; pointer-events:none;
+    z-index: 50;
+  }
+  .flash.go{ animation: flashfx .28s ease-out; }
+  @keyframes flashfx{ 0%{opacity:.9;} 100%{opacity:0;} }
+
+  footer{
+    margin-top: 14px;
+    font-size: 14px;
+    color: var(--ink-dim);
+    text-align:center;
+  }
+</style>
+</head>
+<body>
+
+  <header>
+    <span class="title pixelfont">PIXELCAM</span>
+    <span class="sub">v1.0 &middot; live filter</span>
+  </header>
+
+  <div class="stage" id="stage">
+    <canvas id="view"></canvas>
+    <div class="scanlines"></div>
+    <div class="vignette"></div>
+    <div class="hud">
+      <div class="tl"><span class="dot"></span><span id="hudMode">GAMEBOY</span></div>
+      <div class="tr" id="hudCam">BACK</div>
+      <div class="bl" id="hudPx">PX 8</div>
+      <div class="br" id="hudClock">00:00:00</div>
+    </div>
+    <div class="overlay-msg" id="startOverlay">
+      <div class="box">
+        <span class="pixelfont">TOCCA PER ATTIVARE<br>LA FOTOCAMERA</span>
+        Serve il tuo permesso per usare la camera del telefono.
+        <div><button class="action-btn" id="startBtn" style="margin-top:16px; width:100%;">AVVIA</button></div>
+        <div style="margin-top:14px; font-size:15px; color:var(--ink-dim);">oppure</div>
+        <div><button class="action-btn secondary" id="uploadFromStart" style="margin-top:8px; width:100%;">&#9650; CARICA UNA FOTO</button></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="deck">
+    <div class="palette-row" id="paletteRow"></div>
+
+    <div class="slider-row">
+      <div class="row-label"><span>DIMENSIONE PIXEL</span><span id="pxVal">8</span></div>
+      <input type="range" id="pixelSize" min="2" max="32" step="1" value="8">
+    </div>
+
+    <div class="button-row" style="margin-bottom:10px;">
+      <button class="action-btn secondary" id="flipBtn">&#8635; CAMBIA CAM</button>
+      <button class="action-btn secondary" id="uploadBtn">&#9650; CARICA FOTO</button>
+    </div>
+    <div class="button-row" style="grid-template-columns: 1fr;">
+      <button class="action-btn" id="captureBtn">&#9679; SCATTA</button>
+    </div>
+  </div>
+
+  <footer>Le foto vengono scattate solo sul tuo telefono e non lasciano il dispositivo.</footer>
+
+  <video id="srcVideo" playsinline muted hidden></video>
+  <canvas id="work" hidden></canvas>
+  <input type="file" id="fileInput" accept="image/*" hidden>
+  <div class="flash" id="flash"></div>
+
+<script>
+(function(){
+  const BASE_W = 320, BASE_H = 240;
+  let VW = BASE_W, VH = BASE_H;
+
+  const video = document.getElementById('srcVideo');
+  const viewCanvas = document.getElementById('view');
+  const viewCtx = viewCanvas.getContext('2d', { alpha:false });
+  const workCanvas = document.getElementById('work');
+  const workCtx = workCanvas.getContext('2d', { willReadFrequently:true });
+
+  viewCanvas.width = VW;
+  viewCanvas.height = VH;
+  viewCtx.imageSmoothingEnabled = false;
+
+  let stream = null;
+  let facingMode = 'environment';
+  let pixelSize = 8;
+  let paletteKey = 'gameboy';
+  let active = false;
+  let sourceMode = 'camera'; // 'camera' | 'photo'
+  let photoImg = null;
+
+  const PALETTES = {
+    color:   { label:'COLORE',  swatch:'linear-gradient(90deg,#ff2e6c,#ffb000,#9bbc0f,#2e8bff)' },
+    gameboy: { label:'GAMEBOY', swatch:'linear-gradient(90deg,#0f380f,#306230,#8bac0f,#9bbc0f)', colors:['#0f380f','#306230','#8bac0f','#9bbc0f'] },
+    nes:     { label:'NES',     swatch:'linear-gradient(90deg,#000000,#0058f8,#f83800,#f8d800,#00b800,#f878f8)', colors:[
+        '#000000','#545454','#a4a4a4','#eceeec',
+        '#004488','#0058f8','#3cbcfc','#a4e4fc',
+        '#001884','#0038f8','#4488fc','#b8b8f8',
+        '#440064','#5800e4','#a878f8','#d8b8f8',
+        '#5c0030','#a800a8','#f878f8','#f8b8f8',
+        '#630010','#e40058','#f85898','#f8b8b8',
+        '#4c0700','#f83800','#f87858','#f8d8a8',
+        '#3c1c00','#e45c10','#f8a044','#fce0a8',
+        '#2c3000','#ac7c00','#f8b800','#f8d878',
+        '#003c00','#00b800','#b8f818','#d8f878',
+        '#003c00','#00a800','#58d854','#b8f8b8',
+        '#003c22','#00a844','#58f898','#b8f8d8',
+        '#00325c','#008888','#00e8d8','#00fcfc',
+        '#202020','#787878','#787878','#f8d8f8'
+      ] },
+    cga:     { label:'CGA',     swatch:'linear-gradient(90deg,#000000,#55ffff,#ff55ff,#ffffff)', colors:['#000000','#55ffff','#ff55ff','#ffffff'] },
+    bw:      { label:'B/N',     swatch:'linear-gradient(90deg,#000000,#555555,#aaaaaa,#ffffff)' },
+    sms:     { label:'SMS',     swatch:'linear-gradient(90deg,#0000aa,#00aa00,#aa0000,#aaaa00)' },
+    snes:    { label:'SNES',    swatch:'linear-gradient(90deg,#5a4fc2,#c24f8f,#4fb8c2,#e0c24f)' },
+    megadrive:{ label:'MEGA DRIVE', swatch:'linear-gradient(90deg,#001a4d,#0044aa,#00aacc,#ffcc00)' }
+  };
+
+  const BAYER4 = [
+    [0,8,2,10],
+    [12,4,14,6],
+    [3,11,1,9],
+    [15,7,13,5]
+  ];
+
+  function hexToRgb(hex){
+    const v = parseInt(hex.slice(1),16);
+    return [ (v>>16)&255, (v>>8)&255, v&255 ];
+  }
+
+  const nesRgb = PALETTES.nes.colors.map(hexToRgb);
+  const cgaRgb = PALETTES.cga.colors.map(hexToRgb);
+  const gbRgb  = PALETTES.gameboy.colors.map(hexToRgb);
+
+  function clamp255(v){ return v<0?0:(v>255?255:v); }
+
+  function nearestColor(r,g,b,list){
+    let best = list[0], bestDist = Infinity;
+    for(const c of list){
+      const dr=r-c[0], dg=g-c[1], db=b-c[2];
+      const d = dr*dr+dg*dg+db*db;
+      if(d < bestDist){ bestDist = d; best = c; }
+    }
+    return best;
+  }
+
+  // Ordered (Bayer) dithering before nearest-color lookup: breaks up flat
+  // color bands so limited hardware palettes keep more of the original detail.
+  function ditheredNearestColor(r,g,b,x,y,list,strength){
+    const off = (BAYER4[y%4][x%4]-7.5) * strength;
+    return nearestColor(clamp255(r+off), clamp255(g+off), clamp255(b+off), list);
+  }
+
+  // Emulates a console's real color depth: each channel is posterized to the
+  // number of levels the hardware could actually address, with a small
+  // saturation/contrast push to match that system's characteristic look.
+  function consoleColor(r,g,b, levels, satMul, contrastMul){
+    const lum = 0.299*r + 0.587*g + 0.114*b;
+    let rr = lum + (r-lum)*satMul;
+    let gg = lum + (g-lum)*satMul;
+    let bb = lum + (b-lum)*satMul;
+    rr = 128 + (rr-128)*contrastMul;
+    gg = 128 + (gg-128)*contrastMul;
+    bb = 128 + (bb-128)*contrastMul;
+    const step = 255/(levels-1);
+    rr = Math.round(Math.round(clamp255(rr)/step)*step);
+    gg = Math.round(Math.round(clamp255(gg)/step)*step);
+    bb = Math.round(Math.round(clamp255(bb)/step)*step);
+    return [clamp255(rr), clamp255(gg), clamp255(bb)];
+  }
+
+  function applyPalette(imageData, key){
+    const data = imageData.data;
+    const w = imageData.width;
+    for(let y=0; y<imageData.height; y++){
+      for(let x=0; x<w; x++){
+        const i = (y*w+x)*4;
+        const r = data[i], g = data[i+1], b = data[i+2];
+
+        if(key === 'color'){
+          continue;
+        }
+
+        const lum = 0.299*r + 0.587*g + 0.114*b;
+
+        if(key === 'bw'){
+          const threshold = (BAYER4[y%4][x%4]+0.5)/16 * 255;
+          const v = lum > threshold ? 255 : 0;
+          data[i]=v; data[i+1]=v; data[i+2]=v;
+          continue;
+        }
+
+        if(key === 'gameboy'){
+          const dith = (BAYER4[y%4][x%4]-7.5) * 6;
+          let l = lum + dith;
+          l = Math.max(0, Math.min(255, l));
+          const idx = Math.min(3, Math.floor(l/64));
+          const c = gbRgb[idx];
+          data[i]=c[0]; data[i+1]=c[1]; data[i+2]=c[2];
+          continue;
+        }
+
+        if(key === 'cga'){
+          const c = ditheredNearestColor(r,g,b,x,y, cgaRgb, 12);
+          data[i]=c[0]; data[i+1]=c[1]; data[i+2]=c[2];
+          continue;
+        }
+
+        if(key === 'nes'){
+          const c = ditheredNearestColor(r,g,b,x,y, nesRgb, 10);
+          data[i]=c[0]; data[i+1]=c[1]; data[i+2]=c[2];
+          continue;
+        }
+
+        if(key === 'sms'){
+          // Sega Master System: 6-bit color, 2 bits (4 levels) per channel
+          const c = consoleColor(r,g,b, 4, 1.08, 1.0);
+          data[i]=c[0]; data[i+1]=c[1]; data[i+2]=c[2];
+          continue;
+        }
+
+        if(key === 'megadrive'){
+          // Sega Mega Drive/Genesis: 9-bit color, 3 bits (8 levels) per channel
+          const c = consoleColor(r,g,b, 8, 1.18, 1.1);
+          data[i]=c[0]; data[i+1]=c[1]; data[i+2]=c[2];
+          continue;
+        }
+
+        if(key === 'snes'){
+          // Super Nintendo: 15-bit color, 5 bits (32 levels) per channel
+          const c = consoleColor(r,g,b, 32, 1.05, 1.03);
+          data[i]=c[0]; data[i+1]=c[1]; data[i+2]=c[2];
+          continue;
+        }
+      }
+    }
+    return imageData;
+  }
+
+  function coverRect(sw, sh, dw, dh){
+    const srcRatio = sw/sh, dstRatio = dw/dh;
+    let cw = sw, ch = sh;
+    if(srcRatio > dstRatio){ cw = sh*dstRatio; } else { ch = sw/dstRatio; }
+    return { sx:(sw-cw)/2, sy:(sh-ch)/2, sw:cw, sh:ch };
+  }
+
+  function drawFrame(){
+    if(!active) return;
+
+    const gw = Math.max(1, Math.round(VW/pixelSize));
+    const gh = Math.max(1, Math.round(VH/pixelSize));
+    if(workCanvas.width !== gw) workCanvas.width = gw;
+    if(workCanvas.height !== gh) workCanvas.height = gh;
+    workCtx.imageSmoothingEnabled = true;
+
+    if(sourceMode === 'camera' && video.readyState >= 2 && video.videoWidth){
+      const r = coverRect(video.videoWidth, video.videoHeight, gw, gh);
+      if(facingMode === 'user'){
+        workCtx.save();
+        workCtx.translate(gw,0);
+        workCtx.scale(-1,1);
+        workCtx.drawImage(video, r.sx, r.sy, r.sw, r.sh, 0, 0, gw, gh);
+        workCtx.restore();
+      } else {
+        workCtx.drawImage(video, r.sx, r.sy, r.sw, r.sh, 0, 0, gw, gh);
+      }
+    } else if(sourceMode === 'photo' && photoImg){
+      const r = coverRect(photoImg.naturalWidth, photoImg.naturalHeight, gw, gh);
+      workCtx.drawImage(photoImg, r.sx, r.sy, r.sw, r.sh, 0, 0, gw, gh);
+    } else {
+      requestAnimationFrame(drawFrame);
+      return;
+    }
+
+    const imgData = workCtx.getImageData(0,0,gw,gh);
+    applyPalette(imgData, paletteKey);
+    workCtx.putImageData(imgData, 0, 0);
+
+    viewCtx.imageSmoothingEnabled = false;
+    viewCtx.drawImage(workCanvas, 0, 0, gw, gh, 0, 0, VW, VH);
+
+    requestAnimationFrame(drawFrame);
+  }
+
+  async function startCamera(mode){
+    stopStream();
+    try{
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: mode }, width:{ideal:1280}, height:{ideal:960} },
+        audio: false
+      });
+      video.srcObject = stream;
+      await video.play();
+      facingMode = mode;
+      sourceMode = 'camera';
+      photoImg = null;
+      applyResolution(BASE_W, BASE_H);
+      document.getElementById('hudCam').textContent = mode === 'user' ? 'FRONT' : 'BACK';
+      document.getElementById('uploadBtn').innerHTML = '&#9650; CARICA FOTO';
+      document.getElementById('flipBtn').disabled = false;
+      document.getElementById('captureBtn').innerHTML = '&#9679; SCATTA';
+      active = true;
+      document.getElementById('startOverlay').style.display = 'none';
+      requestAnimationFrame(drawFrame);
+    }catch(err){
+      showError(err);
+    }
+  }
+
+  function stopStream(){
+    if(stream){
+      stream.getTracks().forEach(t => t.stop());
+      stream = null;
+    }
+  }
+
+  function showError(err){
+    const overlay = document.getElementById('startOverlay');
+    overlay.style.display = 'flex';
+    overlay.innerHTML = `<div class="box">
+      <span class="pixelfont" style="color:#ff2e6c;">CAMERA NON DISPONIBILE</span>
+      Controlla di aver concesso il permesso alla fotocamera nel browser. Se sei in un'anteprima incorporata, prova ad aprire questa pagina in una scheda o finestra separata.
+      <div><button class="action-btn" id="retryBtn" style="margin-top:16px; width:100%;">RIPROVA</button></div>
+    </div>`;
+    document.getElementById('retryBtn').addEventListener('click', () => startCamera(facingMode));
+  }
+
+  document.getElementById('startBtn').addEventListener('click', () => startCamera(facingMode));
+  document.getElementById('uploadFromStart').addEventListener('click', () => fileInputEl.click());
+
+  document.getElementById('flipBtn').addEventListener('click', () => {
+    if(sourceMode === 'photo') return;
+    const next = facingMode === 'environment' ? 'user' : 'environment';
+    startCamera(next);
+  });
+
+  const uploadBtn = document.getElementById('uploadBtn');
+  const fileInputEl = document.getElementById('fileInput');
+  const captureBtn = document.getElementById('captureBtn');
+
+  uploadBtn.addEventListener('click', () => {
+    if(sourceMode === 'photo'){
+      returnToCamera();
+    } else {
+      fileInputEl.click();
+    }
+  });
+
+  function applyResolution(w, h){
+    VW = w; VH = h;
+    viewCanvas.width = VW;
+    viewCanvas.height = VH;
+    document.getElementById('stage').style.aspectRatio = `${VW} / ${VH}`;
+  }
+
+  fileInputEl.addEventListener('change', (e) => {
+    const file = e.target.files && e.target.files[0];
+    if(!file) return;
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      photoImg = img;
+      sourceMode = 'photo';
+      stopStream();
+      active = true;
+
+      const ratio = img.naturalWidth / img.naturalHeight;
+      const longSide = 320;
+      if(ratio >= 1){
+        applyResolution(longSide, Math.max(60, Math.round(longSide/ratio)));
+      } else {
+        applyResolution(Math.max(60, Math.round(longSide*ratio)), longSide);
+      }
+
+      document.getElementById('startOverlay').style.display = 'none';
+      document.getElementById('hudCam').textContent = 'FOTO';
+      uploadBtn.innerHTML = '&#8617; TORNA A LIVE';
+      document.getElementById('flipBtn').disabled = true;
+      captureBtn.innerHTML = '&#128190; SALVA';
+      requestAnimationFrame(drawFrame);
+      URL.revokeObjectURL(url);
+    };
+    img.onerror = () => {
+      showError(new Error('image load failed'));
+    };
+    img.src = url;
+    fileInputEl.value = '';
+  });
+
+  function returnToCamera(){
+    photoImg = null;
+    sourceMode = 'camera';
+    applyResolution(BASE_W, BASE_H);
+    uploadBtn.innerHTML = '&#9650; CARICA FOTO';
+    document.getElementById('flipBtn').disabled = false;
+    captureBtn.innerHTML = '&#9679; SCATTA';
+    if(stream){
+      requestAnimationFrame(drawFrame);
+    } else {
+      startCamera(facingMode);
+    }
+  }
+
+  const pxSlider = document.getElementById('pixelSize');
+  pxSlider.addEventListener('input', () => {
+    pixelSize = parseInt(pxSlider.value, 10);
+    document.getElementById('pxVal').textContent = pixelSize;
+    document.getElementById('hudPx').textContent = 'PX ' + pixelSize;
+  });
+
+  const paletteRow = document.getElementById('paletteRow');
+  Object.keys(PALETTES).forEach(key => {
+    const p = PALETTES[key];
+    const btn = document.createElement('button');
+    btn.className = 'pbtn' + (key === paletteKey ? ' active' : '');
+    btn.innerHTML = `<span class="swatch" style="background:${p.swatch}"></span>${p.label}`;
+    btn.addEventListener('click', () => {
+      paletteKey = key;
+      document.getElementById('hudMode').textContent = p.label;
+      [...paletteRow.children].forEach(c => c.classList.remove('active'));
+      btn.classList.add('active');
+    });
+    paletteRow.appendChild(btn);
+  });
+
+  document.getElementById('captureBtn').addEventListener('click', () => {
+    if(!active) return;
+    const scale = 4;
+    const out = document.createElement('canvas');
+    out.width = VW*scale;
+    out.height = VH*scale;
+    const octx = out.getContext('2d');
+    octx.imageSmoothingEnabled = false;
+    octx.drawImage(workCanvas, 0, 0, workCanvas.width, workCanvas.height, 0, 0, out.width, out.height);
+
+    const flash = document.getElementById('flash');
+    flash.classList.remove('go'); void flash.offsetWidth; flash.classList.add('go');
+
+    const dataUrl = out.toDataURL('image/png');
+    const ts = new Date().toISOString().replace(/[:.]/g,'-');
+    const filename = `pixelcam-${ts}.png`;
+
+    let autoDownloadWorked = false;
+    try{
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      autoDownloadWorked = true;
+    }catch(e){
+      autoDownloadWorked = false;
+    }
+
+    showSavePreview(dataUrl, autoDownloadWorked);
+  });
+
+  function showSavePreview(dataUrl, autoDownloadWorked){
+    const modal = document.createElement('div');
+    modal.className = 'overlay-msg';
+    modal.style.zIndex = '30';
+    modal.style.flexDirection = 'column';
+    modal.innerHTML = `
+      <div class="box" style="max-width:280px;">
+        <span class="pixelfont" style="font-size:10px; display:block; margin-bottom:12px; color:var(--amber);">
+          ${autoDownloadWorked ? 'SALVATA (controlla i download)' : 'TIENI PREMUTO PER SALVARE'}
+        </span>
+        <img src="${dataUrl}" style="width:100%; image-rendering:pixelated; border:2px solid var(--line);">
+        <div><button class="action-btn secondary" id="closePreviewBtn" style="margin-top:14px; width:100%;">CHIUDI</button></div>
+      </div>`;
+    document.getElementById('stage').appendChild(modal);
+    document.getElementById('closePreviewBtn').addEventListener('click', () => modal.remove());
+  }
+
+  function tickClock(){
+    const d = new Date();
+    const pad = n => String(n).padStart(2,'0');
+    document.getElementById('hudClock').textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
+  setInterval(tickClock, 1000);
+  tickClock();
+
+  window.addEventListener('beforeunload', stopStream);
+})();
+</script>
+</body>
+</html>
