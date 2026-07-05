@@ -4,8 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>PIXELCAM</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
 <style>
   :root{
     --bg: #121218;
@@ -24,7 +22,7 @@
     margin:0; padding:0; height:100%;
     background: var(--bg);
     color: var(--ink);
-    font-family: 'VT323', monospace;
+    font-family: ui-monospace, 'SFMono-Regular', 'Courier New', monospace;
     overscroll-behavior: none;
   }
   body{
@@ -32,7 +30,7 @@
     min-height:100%;
     padding: 14px 12px 22px;
   }
-  .pixelfont{ font-family:'Press Start 2P', monospace; }
+  .pixelfont{ font-family:'Courier New', ui-monospace, monospace; font-weight:bold; letter-spacing:0.5px; }
 
   header{
     width:100%; max-width:480px;
@@ -84,45 +82,9 @@
     box-shadow: inset 0 0 60px 18px rgba(0,0,0,.55);
     pointer-events:none;
   }
-  .crt-mask{
-    position:absolute; inset:0;
-    pointer-events:none;
-    background-image: repeating-linear-gradient(
-      90deg,
-      rgba(255,0,60,0.10) 0px,
-      rgba(0,255,80,0.08) 1px,
-      rgba(40,80,255,0.10) 2px,
-      transparent 3px
-    );
-    opacity: 0;
-    transition: opacity .2s ease;
-  }
-  .stage.crt-on .crt-mask{ opacity: 1; }
-  .stage.crt-on .scanlines{
-    background: repeating-linear-gradient(
-      to bottom,
-      rgba(0,0,0,0) 0px,
-      rgba(0,0,0,0) 1px,
-      rgba(0,0,0,0.38) 2px,
-      rgba(0,0,0,0.38) 3px
-    );
-  }
-  .stage.crt-on .vignette{
-    box-shadow: inset 0 0 90px 26px rgba(0,0,0,.8), inset 0 0 14px 3px rgba(0,0,0,.5);
-  }
-  .stage.crt-on #view{
-    animation: crtFlicker 5s infinite;
-  }
-  @keyframes crtFlicker{
-    0%, 100% { filter: brightness(1); }
-    92%      { filter: brightness(1); }
-    93%      { filter: brightness(0.94); }
-    94%      { filter: brightness(1.03); }
-    96%      { filter: brightness(0.97); }
-  }
   .hud{
     position:absolute; inset:0; pointer-events:none;
-    font-family:'Press Start 2P', monospace;
+    font-family:'Courier New', ui-monospace, monospace; font-weight:bold; letter-spacing:0.5px;
     font-size: 8px;
     color: var(--green);
     text-shadow: 1px 1px 0 rgba(0,0,0,.8);
@@ -161,7 +123,7 @@
   }
 
   .row-label{
-    font-family:'Press Start 2P', monospace;
+    font-family:'Courier New', ui-monospace, monospace; font-weight:bold; letter-spacing:0.5px;
     font-size: 9px;
     color: var(--ink-dim);
     margin-bottom: 8px;
@@ -175,7 +137,7 @@
     margin-bottom: 14px;
   }
   .pbtn{
-    font-family:'VT323', monospace;
+    font-family:ui-monospace, 'SFMono-Regular', 'Courier New', monospace;
     font-size: 14px;
     line-height: 1.05;
     color: var(--ink);
@@ -208,7 +170,7 @@
   .stepper-btn{
     flex: 0 0 auto;
     width: 52px; height: 44px;
-    font-family:'Press Start 2P', monospace;
+    font-family:'Courier New', ui-monospace, monospace; font-weight:bold; letter-spacing:0.5px;
     font-size: 13px;
     color: #0d0d12;
     background: var(--amber);
@@ -221,7 +183,7 @@
   .stepper-value{
     flex: 1 1 auto;
     text-align:center;
-    font-family:'VT323', monospace;
+    font-family:ui-monospace, 'SFMono-Regular', 'Courier New', monospace;
     font-size: 30px;
     color: var(--green);
     background: #0d0d12;
@@ -235,7 +197,7 @@
     gap: 10px;
   }
   .action-btn{
-    font-family:'Press Start 2P', monospace;
+    font-family:'Courier New', ui-monospace, monospace; font-weight:bold; letter-spacing:0.5px;
     font-size: 10px;
     color: #0d0d12;
     background: var(--green);
@@ -284,7 +246,6 @@
   <div class="stage" id="stage">
     <canvas id="view"></canvas>
     <div class="scanlines"></div>
-    <div class="crt-mask"></div>
     <div class="vignette"></div>
     <div class="hud">
       <div class="tl"><span class="dot"></span><span id="hudMode">GAMEBOY</span></div>
@@ -304,9 +265,12 @@
   </div>
 
   <div class="deck">
-    <div class="button-row" style="margin-bottom:10px;">
-      <button class="action-btn secondary" id="crtBtn" style="grid-column: 1 / -1;">&#128250; CRT: OFF</button>
+    <div class="button-row" style="margin-bottom:10px; grid-template-columns: 1fr;">
+      <button class="action-btn secondary active" id="audioBtn">&#128266; AUDIO: ON</button>
     </div>
+
+    <div class="row-label">FORMATO FOTOCAMERA</div>
+    <div class="palette-row" id="aspectRow" style="grid-template-columns: repeat(4, 1fr);"></div>
 
     <div class="palette-row" id="paletteRow"></div>
 
@@ -339,7 +303,29 @@
 
 <script>
 (function(){
-  const BASE_W = 320, BASE_H = 240;
+  const ASPECTS = {
+    '4:3':  [320, 240],
+    '1:1':  [300, 300],
+    '16:9': [320, 180],
+    '9:16': [180, 320]
+  };
+  // Real native pixel-grid resolutions of each system. When one of these
+  // palettes is active, the rendering grid is capped to the actual hardware
+  // resolution (letterboxed to fit the chosen frame) instead of using the
+  // generic 1-4 pixel-size stepper, which only applies to non-hardware modes.
+  const NATIVE_RES = {
+    gameboy:   [160, 144],
+    nes:       [256, 240],
+    nes2:      [256, 240],
+    cga:       [320, 200],
+    sms:       [256, 192],
+    snes:      [256, 224],
+    megadrive: [320, 224],
+    c64:       [320, 200],
+    zx:        [256, 192]
+  };
+
+  let BASE_W = 320, BASE_H = 240;
   let VW = BASE_W, VH = BASE_H;
 
   const video = document.getElementById('srcVideo');
@@ -606,11 +592,36 @@
     return { sx:(sw-cw)/2, sy:(sh-ch)/2, sw:cw, sh:ch };
   }
 
+  function computeGridLayout(){
+    const native = NATIVE_RES[paletteKey];
+    if(native){
+      const [nw, nh] = native;
+      const nativeAspect = nw / nh;
+      const frameAspect = VW / VH;
+      let drawW, drawH;
+      if(nativeAspect > frameAspect){
+        drawW = VW; drawH = Math.max(1, Math.round(VW / nativeAspect));
+      } else {
+        drawH = VH; drawW = Math.max(1, Math.round(VH * nativeAspect));
+      }
+      return {
+        gw: nw, gh: nh,
+        drawW, drawH,
+        offX: Math.round((VW - drawW) / 2),
+        offY: Math.round((VH - drawH) / 2),
+        letterboxed: true
+      };
+    }
+    const gw = Math.max(1, Math.round(VW / pixelSize));
+    const gh = Math.max(1, Math.round(VH / pixelSize));
+    return { gw, gh, drawW: VW, drawH: VH, offX: 0, offY: 0, letterboxed: false };
+  }
+
   function drawFrame(){
     if(!active) return;
 
-    const gw = Math.max(1, Math.round(VW/pixelSize));
-    const gh = Math.max(1, Math.round(VH/pixelSize));
+    const layout = computeGridLayout();
+    const gw = layout.gw, gh = layout.gh;
     if(workCanvas.width !== gw) workCanvas.width = gw;
     if(workCanvas.height !== gh) workCanvas.height = gh;
     workCtx.imageSmoothingEnabled = true;
@@ -642,15 +653,21 @@
     workCtx.putImageData(imgData, 0, 0);
 
     viewCtx.imageSmoothingEnabled = false;
-    viewCtx.drawImage(workCanvas, 0, 0, gw, gh, 0, 0, VW, VH);
+    if(layout.letterboxed){
+      viewCtx.fillStyle = '#000';
+      viewCtx.fillRect(0, 0, VW, VH);
+    }
+    viewCtx.drawImage(workCanvas, 0, 0, gw, gh, layout.offX, layout.offY, layout.drawW, layout.drawH);
 
     if(isRecording && recCanvas){
       recCtx.imageSmoothingEnabled = false;
-      recCtx.clearRect(0,0,recCanvas.width, recCanvas.height);
-      recCtx.drawImage(workCanvas, 0, 0, gw, gh, 0, 0, recCanvas.width, recCanvas.height);
-      if(crtOn){
-        applyCrtOverlay(recCtx, recCanvas.width, recCanvas.height, REC_SCALE);
-      }
+      recCtx.fillStyle = '#000';
+      recCtx.fillRect(0, 0, recCanvas.width, recCanvas.height);
+      recCtx.drawImage(
+        workCanvas, 0, 0, gw, gh,
+        layout.offX*REC_SCALE, layout.offY*REC_SCALE,
+        layout.drawW*REC_SCALE, layout.drawH*REC_SCALE
+      );
     }
 
     requestAnimationFrame(drawFrame);
@@ -658,11 +675,20 @@
 
   async function startCamera(mode){
     stopStream();
+    const videoConstraints = { facingMode: { ideal: mode }, width:{ideal:1280}, height:{ideal:960} };
     try{
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: mode }, width:{ideal:1280}, height:{ideal:960} },
-        audio: false
-      });
+      try{
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: videoConstraints,
+          audio: !noAudioMode
+        });
+      }catch(errWithAudio){
+        // Mic might be denied/unavailable while camera is fine — retry video-only.
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: videoConstraints,
+          audio: false
+        });
+      }
       video.srcObject = stream;
       await video.play();
       facingMode = mode;
@@ -670,7 +696,7 @@
       photoImg = null;
       applyResolution(BASE_W, BASE_H);
       document.getElementById('hudCam').textContent = mode === 'user' ? 'FRONT' : 'BACK';
-      document.getElementById('uploadBtn').innerHTML = '&#9650; CARICA FOTO';
+      document.getElementById('uploadBtn').innerHTML = '&#9650; CARICA FOTO/VIDEO';
       document.getElementById('flipBtn').disabled = false;
       document.getElementById('captureBtn').innerHTML = '&#9679; SCATTA';
       active = true;
@@ -703,16 +729,15 @@
     document.getElementById('retryBtn').addEventListener('click', () => startCamera(facingMode));
   }
 
-  let crtOn = false;
-  const crtBtn = document.getElementById('crtBtn');
-  crtBtn.addEventListener('click', () => {
-    crtOn = !crtOn;
-    document.getElementById('stage').classList.toggle('crt-on', crtOn);
-    crtBtn.innerHTML = crtOn ? '&#128250; CRT: ON' : '&#128250; CRT: OFF';
-    crtBtn.classList.toggle('active', crtOn);
+  const audioBtn = document.getElementById('audioBtn');
+  audioBtn.addEventListener('click', () => {
+    noAudioMode = !noAudioMode;
+    audioBtn.innerHTML = noAudioMode ? '&#128263; AUDIO: OFF' : '&#128266; AUDIO: ON';
+    audioBtn.classList.toggle('active', !noAudioMode);
   });
 
   const REC_SCALE = 2;
+  let noAudioMode = false;
   let isRecording = false;
   let mediaRecorder = null;
   let recChunks = [];
@@ -756,11 +781,31 @@
     if(typeof updateChunkiness === 'function') updateChunkiness();
   }
 
+  let currentAspectKey = '4:3';
+  const aspectRow = document.getElementById('aspectRow');
+  Object.keys(ASPECTS).forEach(key => {
+    const btn = document.createElement('button');
+    btn.className = 'pbtn' + (key === currentAspectKey ? ' active' : '');
+    btn.textContent = key;
+    btn.addEventListener('click', () => {
+      currentAspectKey = key;
+      const [w, h] = ASPECTS[key];
+      BASE_W = w; BASE_H = h;
+      [...aspectRow.children].forEach(c => c.classList.remove('active'));
+      btn.classList.add('active');
+      if(sourceMode === 'camera'){
+        applyResolution(BASE_W, BASE_H);
+      }
+    });
+    aspectRow.appendChild(btn);
+  });
+
   function enterNonCameraMode(){
     document.getElementById('startOverlay').style.display = 'none';
     uploadBtn.innerHTML = '&#8617; TORNA A LIVE';
     document.getElementById('flipBtn').disabled = true;
     captureBtn.innerHTML = '&#128190; SALVA';
+    [...aspectRow.children].forEach(b => b.disabled = true);
   }
 
   function loadImageFile(file, url){
@@ -842,6 +887,7 @@
     uploadBtn.innerHTML = '&#9650; CARICA FOTO/VIDEO';
     document.getElementById('flipBtn').disabled = false;
     captureBtn.innerHTML = '&#9679; SCATTA';
+    [...aspectRow.children].forEach(b => b.disabled = false);
     if(stream){
       requestAnimationFrame(drawFrame);
     } else {
@@ -858,9 +904,20 @@
     pxMinus.disabled = pixelSize <= 1;
     pxPlus.disabled = pixelSize >= 4;
   }
+  function refreshPixelStepper(){
+    const native = NATIVE_RES[paletteKey];
+    if(native){
+      document.getElementById('pxVal').textContent = `${native[0]}\u00d7${native[1]} NATIVO`;
+      document.getElementById('hudPx').textContent = `${native[0]}x${native[1]}`;
+      pxMinus.disabled = true;
+      pxPlus.disabled = true;
+    } else {
+      updateChunkiness();
+    }
+  }
   pxMinus.addEventListener('click', () => { pixelSize--; updateChunkiness(); });
   pxPlus.addEventListener('click', () => { pixelSize++; updateChunkiness(); });
-  updateChunkiness();
+  refreshPixelStepper();
 
   const paletteRow = document.getElementById('paletteRow');
   Object.keys(PALETTES).forEach(key => {
@@ -873,42 +930,10 @@
       document.getElementById('hudMode').textContent = p.label;
       [...paletteRow.children].forEach(c => c.classList.remove('active'));
       btn.classList.add('active');
+      refreshPixelStepper();
     });
     paletteRow.appendChild(btn);
   });
-
-  function applyCrtOverlay(ctx, w, h, scale){
-    // Scanlines: darken every third row of the underlying (unscaled) grid
-    ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.38)';
-    for(let y=0; y<h; y += scale*3){
-      ctx.fillRect(0, y + scale*2, w, scale);
-    }
-    ctx.restore();
-
-    // RGB subpixel mask (chromatic fringe stripes)
-    ctx.save();
-    ctx.globalAlpha = 0.5;
-    ctx.globalCompositeOperation = 'overlay';
-    for(let x=0; x<w; x += scale*3){
-      ctx.fillStyle = 'rgba(255,0,60,0.55)';
-      ctx.fillRect(x, 0, scale, h);
-      ctx.fillStyle = 'rgba(0,255,80,0.45)';
-      ctx.fillRect(x+scale, 0, scale, h);
-      ctx.fillStyle = 'rgba(40,80,255,0.55)';
-      ctx.fillRect(x+scale*2, 0, scale, h);
-    }
-    ctx.restore();
-
-    // Vignette
-    const grad = ctx.createRadialGradient(w/2,h/2, Math.min(w,h)*0.28, w/2,h/2, Math.max(w,h)*0.72);
-    grad.addColorStop(0, 'rgba(0,0,0,0)');
-    grad.addColorStop(1, 'rgba(0,0,0,0.6)');
-    ctx.save();
-    ctx.fillStyle = grad;
-    ctx.fillRect(0,0,w,h);
-    ctx.restore();
-  }
 
   const recordBtn = document.getElementById('recordBtn');
   recordBtn.addEventListener('click', () => {
@@ -930,6 +955,24 @@
       }
 
       const camStream = recCanvas.captureStream(24);
+
+      if(!noAudioMode){
+        let audioTracks = [];
+        try{
+          if(sourceMode === 'camera' && stream){
+            audioTracks = stream.getAudioTracks();
+          } else if(sourceMode === 'clip'){
+            const grab = clipVideo.captureStream ? clipVideo.captureStream.bind(clipVideo)
+                        : (clipVideo.mozCaptureStream ? clipVideo.mozCaptureStream.bind(clipVideo) : null);
+            if(grab){
+              const clipStream = grab();
+              audioTracks = clipStream.getAudioTracks();
+            }
+          }
+        }catch(e){ audioTracks = []; }
+        audioTracks.forEach(t => camStream.addTrack(t));
+      }
+
       recChunks = [];
       try{
         mediaRecorder = new MediaRecorder(camStream, { mimeType });
@@ -993,16 +1036,20 @@
   document.getElementById('captureBtn').addEventListener('click', () => {
     if(!active) return;
     const scale = 4;
+    const layout = computeGridLayout();
     const out = document.createElement('canvas');
     out.width = VW*scale;
     out.height = VH*scale;
     const octx = out.getContext('2d');
     octx.imageSmoothingEnabled = false;
-    octx.drawImage(workCanvas, 0, 0, workCanvas.width, workCanvas.height, 0, 0, out.width, out.height);
-
-    if(crtOn){
-      applyCrtOverlay(octx, out.width, out.height, scale);
+    if(layout.letterboxed){
+      octx.fillStyle = '#000';
+      octx.fillRect(0, 0, out.width, out.height);
     }
+    octx.drawImage(
+      workCanvas, 0, 0, workCanvas.width, workCanvas.height,
+      layout.offX*scale, layout.offY*scale, layout.drawW*scale, layout.drawH*scale
+    );
 
     const flash = document.getElementById('flash');
     flash.classList.remove('go'); void flash.offsetWidth; flash.classList.add('go');
