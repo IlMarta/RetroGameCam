@@ -32,6 +32,17 @@
   }
   .pixelfont{ font-family:'Courier New', ui-monospace, monospace; font-weight:bold; letter-spacing:0.5px; }
 
+  .sticky-preview{
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    width: 100%;
+    max-width: 480px;
+    margin: 0 auto;
+    background: var(--bg);
+    padding-bottom: 10px;
+    box-shadow: 0 8px 12px -6px rgba(0,0,0,.6);
+  }
   header{
     width:100%; max-width:480px;
     display:flex; align-items:baseline; justify-content:space-between;
@@ -201,13 +212,14 @@
   }
   .dpad-wrap{
     display:flex;
-    justify-content:center;
-    margin-bottom: 14px;
+    flex-direction: column;
+    align-items:center;
+    margin-bottom: 10px;
   }
   .dpad{
     display:grid;
-    grid-template-columns: repeat(3, 48px);
-    grid-template-rows: repeat(3, 48px);
+    grid-template-columns: repeat(3, 40px);
+    grid-template-rows: repeat(3, 40px);
     grid-template-areas:
       ".    up    ."
       "left center right"
@@ -274,28 +286,41 @@
 </head>
 <body>
 
-  <header>
-    <span class="title pixelfont">PIXELCAM</span>
-    <span class="sub">build 14 &middot; live filter</span>
-  </header>
+  <div class="sticky-preview">
+    <header>
+      <span class="title pixelfont">PIXELCAM</span>
+      <span class="sub">build 15 &middot; live filter</span>
+    </header>
 
-  <div class="stage" id="stage">
-    <canvas id="view"></canvas>
-    <div class="scanlines"></div>
-    <div class="vignette"></div>
-    <div class="hud">
-      <div class="tl"><span class="dot"></span><span id="hudMode">GAMEBOY</span></div>
-      <div class="tr" id="hudCam">BACK</div>
-      <div class="bl" id="hudPx">PX 8</div>
-      <div class="br" id="hudClock">00:00:00</div>
+    <div class="stage" id="stage">
+      <canvas id="view"></canvas>
+      <div class="scanlines"></div>
+      <div class="vignette"></div>
+      <div class="hud">
+        <div class="tl"><span class="dot"></span><span id="hudMode">GAMEBOY</span></div>
+        <div class="tr" id="hudCam">BACK</div>
+        <div class="bl" id="hudPx">PX 8</div>
+        <div class="br" id="hudClock">00:00:00</div>
+      </div>
+      <div class="overlay-msg" id="startOverlay">
+        <div class="box">
+          <span class="pixelfont">TOCCA PER ATTIVARE<br>LA FOTOCAMERA</span>
+          Serve il tuo permesso per usare la camera del telefono.
+          <div><button class="action-btn" id="startBtn" style="margin-top:16px; width:100%;">AVVIA</button></div>
+          <div style="margin-top:14px; font-size:15px; color:var(--ink-dim);">oppure</div>
+          <div><button class="action-btn secondary" id="uploadFromStart" style="margin-top:8px; width:100%;">&#9650; CARICA FOTO/VIDEO</button></div>
+        </div>
+      </div>
     </div>
-    <div class="overlay-msg" id="startOverlay">
-      <div class="box">
-        <span class="pixelfont">TOCCA PER ATTIVARE<br>LA FOTOCAMERA</span>
-        Serve il tuo permesso per usare la camera del telefono.
-        <div><button class="action-btn" id="startBtn" style="margin-top:16px; width:100%;">AVVIA</button></div>
-        <div style="margin-top:14px; font-size:15px; color:var(--ink-dim);">oppure</div>
-        <div><button class="action-btn secondary" id="uploadFromStart" style="margin-top:8px; width:100%;">&#9650; CARICA FOTO/VIDEO</button></div>
+
+    <div class="dpad-wrap">
+      <div class="row-label" style="text-align:center; margin-bottom:6px;">INQUADRATURA</div>
+      <div class="dpad">
+        <button class="dpad-btn dpad-up" id="panUp" aria-label="Su">&#9650;</button>
+        <button class="dpad-btn dpad-left" id="panLeft" aria-label="Sinistra">&#9664;</button>
+        <button class="dpad-btn dpad-center" id="panReset" aria-label="Centra">&#9679;</button>
+        <button class="dpad-btn dpad-right" id="panRight" aria-label="Destra">&#9654;</button>
+        <button class="dpad-btn dpad-down" id="panDown" aria-label="Giu">&#9660;</button>
       </div>
     </div>
   </div>
@@ -325,17 +350,6 @@
     <div class="button-row" style="margin-bottom:10px;">
       <button class="action-btn secondary" id="flipBtn">&#8635; CAMBIA CAM</button>
       <button class="action-btn secondary" id="uploadBtn">&#9650; CARICA FOTO/VIDEO</button>
-    </div>
-
-    <div class="row-label">INQUADRATURA (foto/video caricati)</div>
-    <div class="dpad-wrap">
-      <div class="dpad">
-        <button class="dpad-btn dpad-up" id="panUp" aria-label="Su">&#9650;</button>
-        <button class="dpad-btn dpad-left" id="panLeft" aria-label="Sinistra">&#9664;</button>
-        <button class="dpad-btn dpad-center" id="panReset" aria-label="Centra">&#9679;</button>
-        <button class="dpad-btn dpad-right" id="panRight" aria-label="Destra">&#9654;</button>
-        <button class="dpad-btn dpad-down" id="panDown" aria-label="Giu">&#9660;</button>
-      </div>
     </div>
 
     <div class="button-row" style="grid-template-columns: 1fr 1fr;">
