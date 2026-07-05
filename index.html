@@ -50,15 +50,15 @@
 
   .stage{
     position: relative;
-    width: min(480px, 100%, calc((100dvh - 360px) * var(--ar, 1.3333)));
-    min-width: 220px;
+    width: 100%;
+    max-width: 480px;
     margin: 0 auto;
     aspect-ratio: 4 / 3;
     background: #000;
     clip-path: polygon(16px 0, calc(100% - 16px) 0, 100% 16px, 100% calc(100% - 16px), calc(100% - 16px) 100%, 16px 100%, 0 calc(100% - 16px), 0 16px);
     box-shadow: 0 0 0 3px var(--panel), 0 0 0 6px var(--line), 0 10px 30px rgba(0,0,0,.55);
     overflow: hidden;
-    transition: aspect-ratio .2s ease, width .2s ease;
+    transition: aspect-ratio .2s ease;
   }
   #view{
     position:absolute; inset:0;
@@ -783,9 +783,7 @@
     VW = w; VH = h;
     viewCanvas.width = VW;
     viewCanvas.height = VH;
-    const stageEl = document.getElementById('stage');
-    stageEl.style.aspectRatio = `${VW} / ${VH}`;
-    stageEl.style.setProperty('--ar', (VW / VH).toFixed(4));
+    document.getElementById('stage').style.aspectRatio = `${VW} / ${VH}`;
     if(typeof updateChunkiness === 'function') updateChunkiness();
   }
 
