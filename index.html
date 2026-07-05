@@ -50,13 +50,15 @@
 
   .stage{
     position: relative;
-    width: 100%; max-width: 480px;
+    width: min(480px, 100%, calc((100dvh - 360px) * var(--ar, 1.3333)));
+    min-width: 220px;
+    margin: 0 auto;
     aspect-ratio: 4 / 3;
     background: #000;
     clip-path: polygon(16px 0, calc(100% - 16px) 0, 100% 16px, 100% calc(100% - 16px), calc(100% - 16px) 100%, 16px 100%, 0 calc(100% - 16px), 0 16px);
     box-shadow: 0 0 0 3px var(--panel), 0 0 0 6px var(--line), 0 10px 30px rgba(0,0,0,.55);
     overflow: hidden;
-    transition: aspect-ratio .2s ease;
+    transition: aspect-ratio .2s ease, width .2s ease;
   }
   #view{
     position:absolute; inset:0;
@@ -781,29 +783,11 @@
     VW = w; VH = h;
     viewCanvas.width = VW;
     viewCanvas.height = VH;
-    document.getElementById('stage').style.aspectRatio = `${VW} / ${VH}`;
-    fitStageToViewport();
+    const stageEl = document.getElementById('stage');
+    stageEl.style.aspectRatio = `${VW} / ${VH}`;
+    stageEl.style.setProperty('--ar', (VW / VH).toFixed(4));
     if(typeof updateChunkiness === 'function') updateChunkiness();
   }
-
-  function fitStageToViewport(){
-    const stage = document.getElementById('stage');
-    const DESIGN_MAX_WIDTH = 480;
-    const bodyStyles = getComputedStyle(document.body);
-    const horizontalPadding = parseFloat(bodyStyles.paddingLeft) + parseFloat(bodyStyles.paddingRight);
-    const availableWidth = Math.min(DESIGN_MAX_WIDTH, window.innerWidth - horizontalPadding);
-
-    // Reserve roughly 45% of the viewport height for header + controls below,
-    // so the preview shrinks to fit instead of pushing everything off-screen.
-    // If it still doesn't fully fit, the page simply scrolls (never clipped).
-    const heightBudget = Math.max(160, window.innerHeight * 0.55);
-    const widthFromHeight = heightBudget * (VW / VH);
-
-    const finalWidth = Math.max(140, Math.min(availableWidth, widthFromHeight));
-    stage.style.maxWidth = finalWidth + 'px';
-  }
-  window.addEventListener('resize', fitStageToViewport);
-  window.addEventListener('orientationchange', fitStageToViewport);
 
   let currentAspectKey = '4:3';
   const aspectRow = document.getElementById('aspectRow');
