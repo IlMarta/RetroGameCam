@@ -84,6 +84,42 @@
     box-shadow: inset 0 0 60px 18px rgba(0,0,0,.55);
     pointer-events:none;
   }
+  .crt-mask{
+    position:absolute; inset:0;
+    pointer-events:none;
+    background-image: repeating-linear-gradient(
+      90deg,
+      rgba(255,0,60,0.10) 0px,
+      rgba(0,255,80,0.08) 1px,
+      rgba(40,80,255,0.10) 2px,
+      transparent 3px
+    );
+    opacity: 0;
+    transition: opacity .2s ease;
+  }
+  .stage.crt-on .crt-mask{ opacity: 1; }
+  .stage.crt-on .scanlines{
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,0) 0px,
+      rgba(0,0,0,0) 1px,
+      rgba(0,0,0,0.38) 2px,
+      rgba(0,0,0,0.38) 3px
+    );
+  }
+  .stage.crt-on .vignette{
+    box-shadow: inset 0 0 90px 26px rgba(0,0,0,.8), inset 0 0 14px 3px rgba(0,0,0,.5);
+  }
+  .stage.crt-on #view{
+    animation: crtFlicker 5s infinite;
+  }
+  @keyframes crtFlicker{
+    0%, 100% { filter: brightness(1); }
+    92%      { filter: brightness(1); }
+    93%      { filter: brightness(0.94); }
+    94%      { filter: brightness(1.03); }
+    96%      { filter: brightness(0.97); }
+  }
   .hud{
     position:absolute; inset:0; pointer-events:none;
     font-family:'Press Start 2P', monospace;
@@ -163,29 +199,34 @@
   }
 
   .slider-row{ margin-bottom: 14px; }
-  .slider-row .row-label{ display:flex; justify-content:space-between; }
-  input[type=range]{
-    -webkit-appearance:none; appearance:none;
-    width:100%; height: 18px;
-    background: transparent;
+  .slider-row .row-label{ margin-bottom: 8px; }
+  .stepper{
+    display:flex;
+    align-items:center;
+    gap: 10px;
   }
-  input[type=range]::-webkit-slider-runnable-track{
-    height: 8px;
+  .stepper-btn{
+    flex: 0 0 auto;
+    width: 52px; height: 44px;
+    font-family:'Press Start 2P', monospace;
+    font-size: 13px;
+    color: #0d0d12;
+    background: var(--amber);
+    border: none;
+    clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 8px, 100% calc(100% - 8px), calc(100% - 8px) 100%, 8px 100%, 0 calc(100% - 8px), 0 8px);
+    cursor:pointer;
+  }
+  .stepper-btn:disabled{ opacity:.35; }
+  .stepper-btn:active{ transform: translateY(1px); }
+  .stepper-value{
+    flex: 1 1 auto;
+    text-align:center;
+    font-family:'VT323', monospace;
+    font-size: 30px;
+    color: var(--green);
     background: #0d0d12;
     border: 2px solid var(--line);
-  }
-  input[type=range]::-webkit-slider-thumb{
-    -webkit-appearance:none;
-    width: 18px; height: 18px;
-    background: var(--amber);
-    border: 2px solid #6b4d00;
-    margin-top: -7px;
-  }
-  input[type=range]::-moz-range-track{
-    height: 8px; background:#0d0d12; border: 2px solid var(--line);
-  }
-  input[type=range]::-moz-range-thumb{
-    width: 16px; height:16px; background: var(--amber); border: 2px solid #6b4d00; border-radius:0;
+    padding: 4px 0;
   }
 
   .button-row{
@@ -209,6 +250,12 @@
     background: var(--panel-hi);
     color: var(--ink);
     border: 2px solid var(--line);
+  }
+  .action-btn.secondary.active{
+    background: var(--green-dim);
+    color: var(--green);
+    border-color: var(--green);
+    box-shadow: 0 0 8px rgba(155,188,15,.35) inset;
   }
   .action-btn:disabled{ opacity:.4; }
 
@@ -237,6 +284,7 @@
   <div class="stage" id="stage">
     <canvas id="view"></canvas>
     <div class="scanlines"></div>
+    <div class="crt-mask"></div>
     <div class="vignette"></div>
     <div class="hud">
       <div class="tl"><span class="dot"></span><span id="hudMode">GAMEBOY</span></div>
@@ -250,24 +298,33 @@
         Serve il tuo permesso per usare la camera del telefono.
         <div><button class="action-btn" id="startBtn" style="margin-top:16px; width:100%;">AVVIA</button></div>
         <div style="margin-top:14px; font-size:15px; color:var(--ink-dim);">oppure</div>
-        <div><button class="action-btn secondary" id="uploadFromStart" style="margin-top:8px; width:100%;">&#9650; CARICA UNA FOTO</button></div>
+        <div><button class="action-btn secondary" id="uploadFromStart" style="margin-top:8px; width:100%;">&#9650; CARICA FOTO/VIDEO</button></div>
       </div>
     </div>
   </div>
 
   <div class="deck">
+    <div class="button-row" style="margin-bottom:10px;">
+      <button class="action-btn secondary" id="crtBtn" style="grid-column: 1 / -1;">&#128250; CRT: OFF</button>
+    </div>
+
     <div class="palette-row" id="paletteRow"></div>
 
     <div class="slider-row">
-      <div class="row-label"><span>DIMENSIONE PIXEL</span><span id="pxVal">8</span></div>
-      <input type="range" id="pixelSize" min="2" max="32" step="1" value="8">
+      <div class="row-label"><span>DIMENSIONE PIXEL</span></div>
+      <div class="stepper">
+        <button class="stepper-btn" id="pxMinus" aria-label="Diminuisci">&#9664;</button>
+        <span class="stepper-value" id="pxVal">2</span>
+        <button class="stepper-btn" id="pxPlus" aria-label="Aumenta">&#9654;</button>
+      </div>
     </div>
 
     <div class="button-row" style="margin-bottom:10px;">
       <button class="action-btn secondary" id="flipBtn">&#8635; CAMBIA CAM</button>
-      <button class="action-btn secondary" id="uploadBtn">&#9650; CARICA FOTO</button>
+      <button class="action-btn secondary" id="uploadBtn">&#9650; CARICA FOTO/VIDEO</button>
     </div>
-    <div class="button-row" style="grid-template-columns: 1fr;">
+    <div class="button-row" style="grid-template-columns: 1fr 1fr;">
+      <button class="action-btn secondary" id="recordBtn">&#9679; REC</button>
       <button class="action-btn" id="captureBtn">&#9679; SCATTA</button>
     </div>
   </div>
@@ -275,8 +332,9 @@
   <footer>Le foto vengono scattate solo sul tuo telefono e non lasciano il dispositivo.</footer>
 
   <video id="srcVideo" playsinline muted hidden></video>
+  <video id="clipVideo" playsinline muted loop hidden></video>
   <canvas id="work" hidden></canvas>
-  <input type="file" id="fileInput" accept="image/*" hidden>
+  <input type="file" id="fileInput" accept="image/*,video/*" hidden>
   <div class="flash" id="flash"></div>
 
 <script>
@@ -296,7 +354,7 @@
 
   let stream = null;
   let facingMode = 'environment';
-  let pixelSize = 8;
+  let pixelSize = 2;       // block size in virtual px: 1 (finest) .. 4 (chunkiest)
   let paletteKey = 'gameboy';
   let active = false;
   let sourceMode = 'camera'; // 'camera' | 'photo'
@@ -321,11 +379,21 @@
         '#00325c','#008888','#00e8d8','#00fcfc',
         '#202020','#787878','#787878','#f8d8f8'
       ] },
+    nes2:    { label:'NES2',    swatch:'linear-gradient(90deg,#000000,#0078f8,#f83800,#f8d800,#00b800,#f878f8)' },
     cga:     { label:'CGA',     swatch:'linear-gradient(90deg,#000000,#55ffff,#ff55ff,#ffffff)', colors:['#000000','#55ffff','#ff55ff','#ffffff'] },
     bw:      { label:'B/N',     swatch:'linear-gradient(90deg,#000000,#555555,#aaaaaa,#ffffff)' },
     sms:     { label:'SMS',     swatch:'linear-gradient(90deg,#0000aa,#00aa00,#aa0000,#aaaa00)' },
     snes:    { label:'SNES',    swatch:'linear-gradient(90deg,#5a4fc2,#c24f8f,#4fb8c2,#e0c24f)' },
-    megadrive:{ label:'MEGA DRIVE', swatch:'linear-gradient(90deg,#001a4d,#0044aa,#00aacc,#ffcc00)' }
+    megadrive:{ label:'MEGA DRIVE', swatch:'linear-gradient(90deg,#001a4d,#0044aa,#00aacc,#ffcc00)' },
+    c64:     { label:'C64',     swatch:'linear-gradient(90deg,#40318d,#70a4b2,#813338,#9ae29b)', colors:[
+        '#000000','#ffffff','#813338','#75cec8','#8e3c97','#56ac4d','#2e2c9b','#edf171',
+        '#8e5029','#553800','#c46c71','#4a4a4a','#7b7b7b','#a9ff9f','#706deb','#b2b2b2'
+      ] },
+    zx:      { label:'ZX SPECTRUM', swatch:'linear-gradient(90deg,#0000d7,#d70000,#00d700,#d7d700)', colors:[
+        '#000000',
+        '#0000d7','#d70000','#d700d7','#00d700','#00d7d7','#d7d700','#d7d7d7',
+        '#0000ff','#ff0000','#ff00ff','#00ff00','#00ffff','#ffff00','#ffffff'
+      ] }
   };
 
   const BAYER4 = [
@@ -343,6 +411,8 @@
   const nesRgb = PALETTES.nes.colors.map(hexToRgb);
   const cgaRgb = PALETTES.cga.colors.map(hexToRgb);
   const gbRgb  = PALETTES.gameboy.colors.map(hexToRgb);
+  const c64Rgb = PALETTES.c64.colors.map(hexToRgb);
+  const zxRgb  = PALETTES.zx.colors.map(hexToRgb);
 
   function clamp255(v){ return v<0?0:(v>255?255:v); }
 
@@ -366,7 +436,7 @@
   // Emulates a console's real color depth: each channel is posterized to the
   // number of levels the hardware could actually address, with a small
   // saturation/contrast push to match that system's characteristic look.
-  function consoleColor(r,g,b, levels, satMul, contrastMul){
+  function consoleColor(r,g,b, levels, satMul, contrastMul, x, y, ditherStrength, blueBoost){
     const lum = 0.299*r + 0.587*g + 0.114*b;
     let rr = lum + (r-lum)*satMul;
     let gg = lum + (g-lum)*satMul;
@@ -374,6 +444,11 @@
     rr = 128 + (rr-128)*contrastMul;
     gg = 128 + (gg-128)*contrastMul;
     bb = 128 + (bb-128)*contrastMul;
+    if(blueBoost) bb += blueBoost;
+    if(ditherStrength){
+      const off = (BAYER4[y%4][x%4]-7.5) * ditherStrength;
+      rr += off; gg += off; bb += off;
+    }
     const step = 255/(levels-1);
     rr = Math.round(Math.round(clamp255(rr)/step)*step);
     gg = Math.round(Math.round(clamp255(gg)/step)*step);
@@ -381,7 +456,70 @@
     return [clamp255(rr), clamp255(gg), clamp255(bb)];
   }
 
+  function nearestColorIndex(r,g,b,list){
+    let best = 0, bestDist = Infinity;
+    for(let i=0;i<list.length;i++){
+      const c = list[i];
+      const dr=r-c[0], dg=g-c[1], db=b-c[2];
+      const d = dr*dr+dg*dg+db*db;
+      if(d < bestDist){ bestDist = d; best = i; }
+    }
+    return best;
+  }
+
+  // Authentic NES background rendering: the PPU's attribute table assigns one
+  // subpalette to each 16x16-pixel block, so every pixel inside that block is
+  // forced to share at most 4 colors from the 56-entry system palette. This
+  // reproduces that real hardware constraint (and its characteristic
+  // "attribute clash" look) instead of freely quantizing every pixel.
+  function applyNesAuthentic(imageData, list){
+    const data = imageData.data;
+    const w = imageData.width, h = imageData.height;
+    const ATTR_COLS = 16, ATTR_ROWS = 15;
+    const blockW = Math.max(1, Math.ceil(w/ATTR_COLS));
+    const blockH = Math.max(1, Math.ceil(h/ATTR_ROWS));
+    const idxGrid = new Int16Array(w*h);
+
+    for(let y=0; y<h; y++){
+      for(let x=0; x<w; x++){
+        const i=(y*w+x)*4;
+        idxGrid[y*w+x] = nearestColorIndex(data[i], data[i+1], data[i+2], list);
+      }
+    }
+
+    for(let by=0; by<h; by+=blockH){
+      const byEnd = Math.min(by+blockH, h);
+      for(let bx=0; bx<w; bx+=blockW){
+        const bxEnd = Math.min(bx+blockW, w);
+        const freq = new Map();
+        for(let y=by; y<byEnd; y++){
+          for(let x=bx; x<bxEnd; x++){
+            const idx = idxGrid[y*w+x];
+            freq.set(idx, (freq.get(idx)||0)+1);
+          }
+        }
+        const subpalette = [...freq.entries()]
+          .sort((a,b) => b[1]-a[1])
+          .slice(0,4)
+          .map(e => list[e[0]]);
+
+        for(let y=by; y<byEnd; y++){
+          for(let x=bx; x<bxEnd; x++){
+            const i=(y*w+x)*4;
+            const c = nearestColor(data[i], data[i+1], data[i+2], subpalette);
+            data[i]=c[0]; data[i+1]=c[1]; data[i+2]=c[2];
+          }
+        }
+      }
+    }
+    return imageData;
+  }
+
   function applyPalette(imageData, key){
+    if(key === 'nes'){
+      return applyNesAuthentic(imageData, nesRgb);
+    }
+
     const data = imageData.data;
     const w = imageData.width;
     for(let y=0; y<imageData.height; y++){
@@ -418,29 +556,41 @@
           continue;
         }
 
-        if(key === 'nes'){
+        if(key === 'nes2'){
           const c = ditheredNearestColor(r,g,b,x,y, nesRgb, 10);
+          data[i]=c[0]; data[i+1]=c[1]; data[i+2]=c[2];
+          continue;
+        }
+
+        if(key === 'c64'){
+          const c = ditheredNearestColor(r,g,b,x,y, c64Rgb, 10);
+          data[i]=c[0]; data[i+1]=c[1]; data[i+2]=c[2];
+          continue;
+        }
+
+        if(key === 'zx'){
+          const c = ditheredNearestColor(r,g,b,x,y, zxRgb, 10);
           data[i]=c[0]; data[i+1]=c[1]; data[i+2]=c[2];
           continue;
         }
 
         if(key === 'sms'){
           // Sega Master System: 6-bit color, 2 bits (4 levels) per channel
-          const c = consoleColor(r,g,b, 4, 1.08, 1.0);
+          const c = consoleColor(r,g,b, 4, 1.08, 1.0, x, y, 0, 0);
           data[i]=c[0]; data[i+1]=c[1]; data[i+2]=c[2];
           continue;
         }
 
         if(key === 'megadrive'){
           // Sega Mega Drive/Genesis: 9-bit color, 3 bits (8 levels) per channel
-          const c = consoleColor(r,g,b, 8, 1.18, 1.1);
+          const c = consoleColor(r,g,b, 8, 1.18, 1.1, x, y, 0, 0);
           data[i]=c[0]; data[i+1]=c[1]; data[i+2]=c[2];
           continue;
         }
 
         if(key === 'snes'){
           // Super Nintendo: 15-bit color, 5 bits (32 levels) per channel
-          const c = consoleColor(r,g,b, 32, 1.05, 1.03);
+          const c = consoleColor(r,g,b, 32, 1.05, 1.03, x, y, 0, 0);
           data[i]=c[0]; data[i+1]=c[1]; data[i+2]=c[2];
           continue;
         }
@@ -479,6 +629,9 @@
     } else if(sourceMode === 'photo' && photoImg){
       const r = coverRect(photoImg.naturalWidth, photoImg.naturalHeight, gw, gh);
       workCtx.drawImage(photoImg, r.sx, r.sy, r.sw, r.sh, 0, 0, gw, gh);
+    } else if(sourceMode === 'clip' && clipVideo.readyState >= 2 && clipVideo.videoWidth){
+      const r = coverRect(clipVideo.videoWidth, clipVideo.videoHeight, gw, gh);
+      workCtx.drawImage(clipVideo, r.sx, r.sy, r.sw, r.sh, 0, 0, gw, gh);
     } else {
       requestAnimationFrame(drawFrame);
       return;
@@ -490,6 +643,15 @@
 
     viewCtx.imageSmoothingEnabled = false;
     viewCtx.drawImage(workCanvas, 0, 0, gw, gh, 0, 0, VW, VH);
+
+    if(isRecording && recCanvas){
+      recCtx.imageSmoothingEnabled = false;
+      recCtx.clearRect(0,0,recCanvas.width, recCanvas.height);
+      recCtx.drawImage(workCanvas, 0, 0, gw, gh, 0, 0, recCanvas.width, recCanvas.height);
+      if(crtOn){
+        applyCrtOverlay(recCtx, recCanvas.width, recCanvas.height, REC_SCALE);
+      }
+    }
 
     requestAnimationFrame(drawFrame);
   }
@@ -529,19 +691,45 @@
   function showError(err){
     const overlay = document.getElementById('startOverlay');
     overlay.style.display = 'flex';
+    const detail = err && (err.name || err.message)
+      ? `${err.name || ''} ${err.message || ''}`.trim()
+      : 'Errore sconosciuto';
     overlay.innerHTML = `<div class="box">
       <span class="pixelfont" style="color:#ff2e6c;">CAMERA NON DISPONIBILE</span>
       Controlla di aver concesso il permesso alla fotocamera nel browser. Se sei in un'anteprima incorporata, prova ad aprire questa pagina in una scheda o finestra separata.
+      <div style="margin-top:10px; font-size:13px; color:var(--ink-dim); word-break:break-word;">Dettaglio tecnico: ${detail}</div>
       <div><button class="action-btn" id="retryBtn" style="margin-top:16px; width:100%;">RIPROVA</button></div>
     </div>`;
     document.getElementById('retryBtn').addEventListener('click', () => startCamera(facingMode));
+  }
+
+  let crtOn = false;
+  const crtBtn = document.getElementById('crtBtn');
+  crtBtn.addEventListener('click', () => {
+    crtOn = !crtOn;
+    document.getElementById('stage').classList.toggle('crt-on', crtOn);
+    crtBtn.innerHTML = crtOn ? '&#128250; CRT: ON' : '&#128250; CRT: OFF';
+    crtBtn.classList.toggle('active', crtOn);
+  });
+
+  const REC_SCALE = 2;
+  let isRecording = false;
+  let mediaRecorder = null;
+  let recChunks = [];
+  let recCanvas = null;
+  let recCtx = null;
+
+  function stopRecordingIfActive(){
+    if(isRecording && mediaRecorder && mediaRecorder.state !== 'inactive'){
+      mediaRecorder.stop();
+    }
   }
 
   document.getElementById('startBtn').addEventListener('click', () => startCamera(facingMode));
   document.getElementById('uploadFromStart').addEventListener('click', () => fileInputEl.click());
 
   document.getElementById('flipBtn').addEventListener('click', () => {
-    if(sourceMode === 'photo') return;
+    if(sourceMode !== 'camera') return;
     const next = facingMode === 'environment' ? 'user' : 'environment';
     startCamera(next);
   });
@@ -549,9 +737,11 @@
   const uploadBtn = document.getElementById('uploadBtn');
   const fileInputEl = document.getElementById('fileInput');
   const captureBtn = document.getElementById('captureBtn');
+  const clipVideo = document.getElementById('clipVideo');
+  let clipUrl = null;
 
   uploadBtn.addEventListener('click', () => {
-    if(sourceMode === 'photo'){
+    if(sourceMode !== 'camera'){
       returnToCamera();
     } else {
       fileInputEl.click();
@@ -563,14 +753,20 @@
     viewCanvas.width = VW;
     viewCanvas.height = VH;
     document.getElementById('stage').style.aspectRatio = `${VW} / ${VH}`;
+    if(typeof updateChunkiness === 'function') updateChunkiness();
   }
 
-  fileInputEl.addEventListener('change', (e) => {
-    const file = e.target.files && e.target.files[0];
-    if(!file) return;
-    const url = URL.createObjectURL(file);
+  function enterNonCameraMode(){
+    document.getElementById('startOverlay').style.display = 'none';
+    uploadBtn.innerHTML = '&#8617; TORNA A LIVE';
+    document.getElementById('flipBtn').disabled = true;
+    captureBtn.innerHTML = '&#128190; SALVA';
+  }
+
+  function loadImageFile(file, url){
     const img = new Image();
     img.onload = () => {
+      stopRecordingIfActive();
       photoImg = img;
       sourceMode = 'photo';
       stopStream();
@@ -584,26 +780,66 @@
         applyResolution(Math.max(60, Math.round(longSide*ratio)), longSide);
       }
 
-      document.getElementById('startOverlay').style.display = 'none';
       document.getElementById('hudCam').textContent = 'FOTO';
-      uploadBtn.innerHTML = '&#8617; TORNA A LIVE';
-      document.getElementById('flipBtn').disabled = true;
-      captureBtn.innerHTML = '&#128190; SALVA';
+      enterNonCameraMode();
       requestAnimationFrame(drawFrame);
       URL.revokeObjectURL(url);
     };
-    img.onerror = () => {
-      showError(new Error('image load failed'));
-    };
+    img.onerror = () => showError(new Error('image load failed'));
     img.src = url;
+  }
+
+  function loadVideoFile(file, url){
+    stopRecordingIfActive();
+    clipVideo.src = url;
+    clipVideo.onloadedmetadata = () => {
+      photoImg = null;
+      sourceMode = 'clip';
+      stopStream();
+      active = true;
+
+      const ratio = clipVideo.videoWidth / clipVideo.videoHeight;
+      const longSide = 320;
+      if(ratio >= 1){
+        applyResolution(longSide, Math.max(60, Math.round(longSide/ratio)));
+      } else {
+        applyResolution(Math.max(60, Math.round(longSide*ratio)), longSide);
+      }
+
+      document.getElementById('hudCam').textContent = 'VIDEO';
+      enterNonCameraMode();
+      clipVideo.play();
+      requestAnimationFrame(drawFrame);
+    };
+    clipVideo.onerror = () => showError(new Error('video load failed'));
+  }
+
+  fileInputEl.addEventListener('change', (e) => {
+    const file = e.target.files && e.target.files[0];
+    if(!file) return;
+    if(clipUrl){ URL.revokeObjectURL(clipUrl); clipUrl = null; }
+    const url = URL.createObjectURL(file);
+    if(file.type.startsWith('video/')){
+      clipUrl = url;
+      loadVideoFile(file, url);
+    } else {
+      loadImageFile(file, url);
+    }
     fileInputEl.value = '';
   });
 
   function returnToCamera(){
+    stopRecordingIfActive();
     photoImg = null;
+    if(sourceMode === 'clip'){
+      clipVideo.pause();
+      clipVideo.removeAttribute('src');
+      clipVideo.load();
+    }
+    if(clipUrl){ URL.revokeObjectURL(clipUrl); clipUrl = null; }
     sourceMode = 'camera';
     applyResolution(BASE_W, BASE_H);
-    uploadBtn.innerHTML = '&#9650; CARICA FOTO';
+    uploadBtn.innerHTML = '&#9650; CARICA FOTO/VIDEO';
     document.getElementById('flipBtn').disabled = false;
     captureBtn.innerHTML = '&#9679; SCATTA';
     if(stream){
@@ -613,12 +849,18 @@
     }
   }
 
-  const pxSlider = document.getElementById('pixelSize');
-  pxSlider.addEventListener('input', () => {
-    pixelSize = parseInt(pxSlider.value, 10);
+  const pxMinus = document.getElementById('pxMinus');
+  const pxPlus = document.getElementById('pxPlus');
+  function updateChunkiness(){
+    pixelSize = Math.max(1, Math.min(4, pixelSize));
     document.getElementById('pxVal').textContent = pixelSize;
     document.getElementById('hudPx').textContent = 'PX ' + pixelSize;
-  });
+    pxMinus.disabled = pixelSize <= 1;
+    pxPlus.disabled = pixelSize >= 4;
+  }
+  pxMinus.addEventListener('click', () => { pixelSize--; updateChunkiness(); });
+  pxPlus.addEventListener('click', () => { pixelSize++; updateChunkiness(); });
+  updateChunkiness();
 
   const paletteRow = document.getElementById('paletteRow');
   Object.keys(PALETTES).forEach(key => {
@@ -635,6 +877,119 @@
     paletteRow.appendChild(btn);
   });
 
+  function applyCrtOverlay(ctx, w, h, scale){
+    // Scanlines: darken every third row of the underlying (unscaled) grid
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.38)';
+    for(let y=0; y<h; y += scale*3){
+      ctx.fillRect(0, y + scale*2, w, scale);
+    }
+    ctx.restore();
+
+    // RGB subpixel mask (chromatic fringe stripes)
+    ctx.save();
+    ctx.globalAlpha = 0.5;
+    ctx.globalCompositeOperation = 'overlay';
+    for(let x=0; x<w; x += scale*3){
+      ctx.fillStyle = 'rgba(255,0,60,0.55)';
+      ctx.fillRect(x, 0, scale, h);
+      ctx.fillStyle = 'rgba(0,255,80,0.45)';
+      ctx.fillRect(x+scale, 0, scale, h);
+      ctx.fillStyle = 'rgba(40,80,255,0.55)';
+      ctx.fillRect(x+scale*2, 0, scale, h);
+    }
+    ctx.restore();
+
+    // Vignette
+    const grad = ctx.createRadialGradient(w/2,h/2, Math.min(w,h)*0.28, w/2,h/2, Math.max(w,h)*0.72);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.6)');
+    ctx.save();
+    ctx.fillStyle = grad;
+    ctx.fillRect(0,0,w,h);
+    ctx.restore();
+  }
+
+  const recordBtn = document.getElementById('recordBtn');
+  recordBtn.addEventListener('click', () => {
+    if(!active) return;
+
+    if(!isRecording){
+      recCanvas = document.createElement('canvas');
+      recCanvas.width = VW * REC_SCALE;
+      recCanvas.height = VH * REC_SCALE;
+      recCtx = recCanvas.getContext('2d');
+
+      let mimeType = 'video/webm;codecs=vp9';
+      if(!(window.MediaRecorder && MediaRecorder.isTypeSupported(mimeType))){
+        mimeType = 'video/webm';
+      }
+      if(!window.MediaRecorder || !MediaRecorder.isTypeSupported(mimeType)){
+        showError(new Error('MediaRecorder non supportato su questo browser'));
+        return;
+      }
+
+      const camStream = recCanvas.captureStream(24);
+      recChunks = [];
+      try{
+        mediaRecorder = new MediaRecorder(camStream, { mimeType });
+      }catch(e){
+        showError(e);
+        return;
+      }
+      mediaRecorder.ondataavailable = (e) => {
+        if(e.data && e.data.size) recChunks.push(e.data);
+      };
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(recChunks, { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        showVideoSavePreview(url);
+        recCanvas = null;
+        recCtx = null;
+      };
+      mediaRecorder.start();
+      isRecording = true;
+      recordBtn.innerHTML = '&#9724; STOP';
+      recordBtn.classList.add('active');
+    } else {
+      isRecording = false;
+      recordBtn.innerHTML = '&#9679; REC';
+      recordBtn.classList.remove('active');
+      mediaRecorder.stop();
+    }
+  });
+
+  function showVideoSavePreview(url){
+    const modal = document.createElement('div');
+    modal.className = 'overlay-msg';
+    modal.style.zIndex = '30';
+    modal.style.flexDirection = 'column';
+    modal.innerHTML = `
+      <div class="box" style="max-width:280px;">
+        <span class="pixelfont" style="font-size:10px; display:block; margin-bottom:12px; color:var(--amber);">
+          VIDEO PRONTO
+        </span>
+        <video src="${url}" controls playsinline style="width:100%; border:2px solid var(--line);"></video>
+        <div><button class="action-btn" id="downloadVideoBtn" style="margin-top:14px; width:100%;">&#128190; SCARICA</button></div>
+        <div><button class="action-btn secondary" id="closeVideoPreviewBtn" style="margin-top:10px; width:100%;">CHIUDI</button></div>
+      </div>`;
+    document.getElementById('stage').appendChild(modal);
+
+    document.getElementById('downloadVideoBtn').addEventListener('click', () => {
+      const a = document.createElement('a');
+      const ts = new Date().toISOString().replace(/[:.]/g,'-');
+      a.href = url;
+      a.download = `pixelcam-${ts}.webm`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    });
+    document.getElementById('closeVideoPreviewBtn').addEventListener('click', () => {
+      modal.remove();
+      URL.revokeObjectURL(url);
+    });
+  }
+
   document.getElementById('captureBtn').addEventListener('click', () => {
     if(!active) return;
     const scale = 4;
@@ -644,6 +999,10 @@
     const octx = out.getContext('2d');
     octx.imageSmoothingEnabled = false;
     octx.drawImage(workCanvas, 0, 0, workCanvas.width, workCanvas.height, 0, 0, out.width, out.height);
+
+    if(crtOn){
+      applyCrtOverlay(octx, out.width, out.height, scale);
+    }
 
     const flash = document.getElementById('flash');
     flash.classList.remove('go'); void flash.offsetWidth; flash.classList.add('go');
