@@ -281,6 +281,9 @@
         <span class="stepper-value" id="pxVal">2</span>
         <button class="stepper-btn" id="pxPlus" aria-label="Aumenta">&#9654;</button>
       </div>
+      <button class="action-btn secondary active" id="nativeLockBtn" style="width:100%; margin-top:8px; font-size:12px;">
+        &#128274; RISOLUZIONE NATIVA: ON
+      </button>
     </div>
 
     <div class="button-row" style="margin-bottom:10px;">
@@ -342,6 +345,7 @@
   let facingMode = 'environment';
   let pixelSize = 2;       // block size in virtual px: 1 (finest) .. 4 (chunkiest)
   let paletteKey = 'gameboy';
+  let nativeResLock = true; // when off, ignores hardware pixel limits and always uses the free 1-4 stepper
   let active = false;
   let sourceMode = 'camera'; // 'camera' | 'photo'
   let photoImg = null;
@@ -593,7 +597,7 @@
   }
 
   function computeGridLayout(){
-    const native = NATIVE_RES[paletteKey];
+    const native = nativeResLock ? NATIVE_RES[paletteKey] : null;
     if(native){
       const [nw, nh] = native;
       const nativeAspect = nw / nh;
@@ -778,8 +782,28 @@
     viewCanvas.width = VW;
     viewCanvas.height = VH;
     document.getElementById('stage').style.aspectRatio = `${VW} / ${VH}`;
+    fitStageToViewport();
     if(typeof updateChunkiness === 'function') updateChunkiness();
   }
+
+  function fitStageToViewport(){
+    const stage = document.getElementById('stage');
+    const DESIGN_MAX_WIDTH = 480;
+    const bodyStyles = getComputedStyle(document.body);
+    const horizontalPadding = parseFloat(bodyStyles.paddingLeft) + parseFloat(bodyStyles.paddingRight);
+    const availableWidth = Math.min(DESIGN_MAX_WIDTH, window.innerWidth - horizontalPadding);
+
+    // Reserve roughly 45% of the viewport height for header + controls below,
+    // so the preview shrinks to fit instead of pushing everything off-screen.
+    // If it still doesn't fully fit, the page simply scrolls (never clipped).
+    const heightBudget = Math.max(160, window.innerHeight * 0.55);
+    const widthFromHeight = heightBudget * (VW / VH);
+
+    const finalWidth = Math.max(140, Math.min(availableWidth, widthFromHeight));
+    stage.style.maxWidth = finalWidth + 'px';
+  }
+  window.addEventListener('resize', fitStageToViewport);
+  window.addEventListener('orientationchange', fitStageToViewport);
 
   let currentAspectKey = '4:3';
   const aspectRow = document.getElementById('aspectRow');
@@ -905,7 +929,7 @@
     pxPlus.disabled = pixelSize >= 4;
   }
   function refreshPixelStepper(){
-    const native = NATIVE_RES[paletteKey];
+    const native = nativeResLock ? NATIVE_RES[paletteKey] : null;
     if(native){
       document.getElementById('pxVal').textContent = `${native[0]}\u00d7${native[1]} NATIVO`;
       document.getElementById('hudPx').textContent = `${native[0]}x${native[1]}`;
@@ -915,6 +939,15 @@
       updateChunkiness();
     }
   }
+  const nativeLockBtn = document.getElementById('nativeLockBtn');
+  nativeLockBtn.addEventListener('click', () => {
+    nativeResLock = !nativeResLock;
+    nativeLockBtn.innerHTML = nativeResLock
+      ? '&#128274; RISOLUZIONE NATIVA: ON'
+      : '&#128275; RISOLUZIONE NATIVA: OFF';
+    nativeLockBtn.classList.toggle('active', nativeResLock);
+    refreshPixelStepper();
+  });
   pxMinus.addEventListener('click', () => { pixelSize--; updateChunkiness(); });
   pxPlus.addEventListener('click', () => { pixelSize++; updateChunkiness(); });
   refreshPixelStepper();
