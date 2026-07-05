@@ -199,6 +199,39 @@
     grid-template-columns: 1fr 1fr;
     gap: 10px;
   }
+  .dpad-wrap{
+    display:flex;
+    justify-content:center;
+    margin-bottom: 14px;
+  }
+  .dpad{
+    display:grid;
+    grid-template-columns: repeat(3, 48px);
+    grid-template-rows: repeat(3, 48px);
+    grid-template-areas:
+      ".    up    ."
+      "left center right"
+      ".    down  .";
+    gap: 4px;
+  }
+  .dpad-btn{
+    background: var(--panel-hi);
+    border: 2px solid var(--line);
+    color: var(--amber);
+    font-size: 16px;
+    cursor:pointer;
+    clip-path: polygon(6px 0, calc(100% - 6px) 0, 100% 6px, 100% calc(100% - 6px), calc(100% - 6px) 100%, 6px 100%, 0 calc(100% - 6px), 0 6px);
+  }
+  .dpad-btn:active{ transform: translateY(1px); }
+  .dpad-up{ grid-area: up; }
+  .dpad-left{ grid-area: left; }
+  .dpad-right{ grid-area: right; }
+  .dpad-down{ grid-area: down; }
+  .dpad-center{
+    grid-area: center;
+    color: var(--green);
+    font-size: 12px;
+  }
   .action-btn{
     font-family:'Courier New', ui-monospace, monospace; font-weight:bold; letter-spacing:0.5px;
     font-size: 10px;
@@ -243,7 +276,7 @@
 
   <header>
     <span class="title pixelfont">PIXELCAM</span>
-    <span class="sub">build 13 &middot; live filter</span>
+    <span class="sub">build 14 &middot; live filter</span>
   </header>
 
   <div class="stage" id="stage">
@@ -284,8 +317,8 @@
         <span class="stepper-value" id="pxVal">2</span>
         <button class="stepper-btn" id="pxPlus" aria-label="Aumenta">&#9654;</button>
       </div>
-      <button class="action-btn secondary active" id="nativeLockBtn" style="width:100%; margin-top:8px; font-size:12px;">
-        &#128274; RISOLUZIONE NATIVA: ON
+      <button class="action-btn secondary" id="nativeLockBtn" style="width:100%; margin-top:8px; font-size:12px;">
+        &#128275; RISOLUZIONE NATIVA: OFF
       </button>
     </div>
 
@@ -293,6 +326,18 @@
       <button class="action-btn secondary" id="flipBtn">&#8635; CAMBIA CAM</button>
       <button class="action-btn secondary" id="uploadBtn">&#9650; CARICA FOTO/VIDEO</button>
     </div>
+
+    <div class="row-label">INQUADRATURA (foto/video caricati)</div>
+    <div class="dpad-wrap">
+      <div class="dpad">
+        <button class="dpad-btn dpad-up" id="panUp" aria-label="Su">&#9650;</button>
+        <button class="dpad-btn dpad-left" id="panLeft" aria-label="Sinistra">&#9664;</button>
+        <button class="dpad-btn dpad-center" id="panReset" aria-label="Centra">&#9679;</button>
+        <button class="dpad-btn dpad-right" id="panRight" aria-label="Destra">&#9654;</button>
+        <button class="dpad-btn dpad-down" id="panDown" aria-label="Giu">&#9660;</button>
+      </div>
+    </div>
+
     <div class="button-row" style="grid-template-columns: 1fr 1fr;">
       <button class="action-btn secondary" id="recordBtn">&#9679; REC</button>
       <button class="action-btn" id="captureBtn">&#9679; SCATTA</button>
@@ -348,10 +393,11 @@
   let facingMode = 'environment';
   let pixelSize = 2;       // block size in virtual px: 1 (finest) .. 4 (chunkiest)
   let paletteKey = 'gameboy';
-  let nativeResLock = true; // when off, ignores hardware pixel limits and always uses the free 1-4 stepper
+  let nativeResLock = false; // when off (default), fills the whole frame; ON forces real hardware pixel limits
   let active = false;
   let sourceMode = 'camera'; // 'camera' | 'photo'
   let photoImg = null;
+  let panX = 0, panY = 0; // manual framing offset for uploaded photo/video, range -1..1
 
   const PALETTES = {
     color:   { label:'COLORE',  swatch:'linear-gradient(90deg,#ff2e6c,#ffb000,#9bbc0f,#2e8bff)' },
@@ -592,11 +638,15 @@
     return imageData;
   }
 
-  function coverRect(sw, sh, dw, dh){
+  function coverRect(sw, sh, dw, dh, panX, panY){
+    panX = panX || 0; panY = panY || 0;
     const srcRatio = sw/sh, dstRatio = dw/dh;
     let cw = sw, ch = sh;
     if(srcRatio > dstRatio){ cw = sh*dstRatio; } else { ch = sw/dstRatio; }
-    return { sx:(sw-cw)/2, sy:(sh-ch)/2, sw:cw, sh:ch };
+    const slackX = sw - cw, slackY = sh - ch;
+    const sx = (slackX/2) + (slackX/2) * panX;
+    const sy = (slackY/2) + (slackY/2) * panY;
+    return { sx, sy, sw:cw, sh:ch };
   }
 
   function computeGridLayout(){
@@ -645,10 +695,10 @@
         workCtx.drawImage(video, r.sx, r.sy, r.sw, r.sh, 0, 0, gw, gh);
       }
     } else if(sourceMode === 'photo' && photoImg){
-      const r = coverRect(photoImg.naturalWidth, photoImg.naturalHeight, gw, gh);
+      const r = coverRect(photoImg.naturalWidth, photoImg.naturalHeight, gw, gh, panX, panY);
       workCtx.drawImage(photoImg, r.sx, r.sy, r.sw, r.sh, 0, 0, gw, gh);
     } else if(sourceMode === 'clip' && clipVideo.readyState >= 2 && clipVideo.videoWidth){
-      const r = coverRect(clipVideo.videoWidth, clipVideo.videoHeight, gw, gh);
+      const r = coverRect(clipVideo.videoWidth, clipVideo.videoHeight, gw, gh, panX, panY);
       workCtx.drawImage(clipVideo, r.sx, r.sy, r.sw, r.sh, 0, 0, gw, gh);
     } else {
       requestAnimationFrame(drawFrame);
@@ -823,6 +873,7 @@
       sourceMode = 'photo';
       stopStream();
       active = true;
+      panX = 0; panY = 0;
 
       const ratio = img.naturalWidth / img.naturalHeight;
       const longSide = 320;
@@ -849,6 +900,7 @@
       sourceMode = 'clip';
       stopStream();
       active = true;
+      panX = 0; panY = 0;
 
       const ratio = clipVideo.videoWidth / clipVideo.videoHeight;
       const longSide = 320;
@@ -931,6 +983,15 @@
     nativeLockBtn.classList.toggle('active', nativeResLock);
     refreshPixelStepper();
   });
+
+  const PAN_STEP = 0.15;
+  function clampPan(v){ return Math.max(-1, Math.min(1, v)); }
+  document.getElementById('panUp').addEventListener('click', () => { panY = clampPan(panY - PAN_STEP); });
+  document.getElementById('panDown').addEventListener('click', () => { panY = clampPan(panY + PAN_STEP); });
+  document.getElementById('panLeft').addEventListener('click', () => { panX = clampPan(panX - PAN_STEP); });
+  document.getElementById('panRight').addEventListener('click', () => { panX = clampPan(panX + PAN_STEP); });
+  document.getElementById('panReset').addEventListener('click', () => { panX = 0; panY = 0; });
+
   pxMinus.addEventListener('click', () => { pixelSize--; updateChunkiness(); });
   pxPlus.addEventListener('click', () => { pixelSize++; updateChunkiness(); });
   refreshPixelStepper();
