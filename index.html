@@ -235,6 +235,29 @@
     clip-path: polygon(6px 0, calc(100% - 6px) 0, 100% 6px, 100% calc(100% - 6px), calc(100% - 6px) 100%, 6px 100%, 0 calc(100% - 6px), 0 6px);
   }
   .dpad-btn:active{ transform: translateY(1px); }
+  .seek-slider{
+    -webkit-appearance:none; appearance:none;
+    width:100%; height: 20px;
+    background: transparent;
+  }
+  .seek-slider::-webkit-slider-runnable-track{
+    height: 8px;
+    background: #0d0d12;
+    border: 2px solid var(--line);
+  }
+  .seek-slider::-webkit-slider-thumb{
+    -webkit-appearance:none;
+    width: 18px; height: 18px;
+    background: var(--amber);
+    border: 2px solid #6b4d00;
+    margin-top: -7px;
+  }
+  .seek-slider::-moz-range-track{
+    height: 8px; background:#0d0d12; border: 2px solid var(--line);
+  }
+  .seek-slider::-moz-range-thumb{
+    width: 16px; height:16px; background: var(--amber); border: 2px solid #6b4d00; border-radius:0;
+  }
   .dpad-up{ grid-area: up; }
   .dpad-left{ grid-area: left; }
   .dpad-right{ grid-area: right; }
@@ -289,7 +312,7 @@
   <div class="sticky-preview">
     <header>
       <span class="title pixelfont">PIXELCAM</span>
-      <span class="sub">build 15 &middot; live filter</span>
+      <span class="sub">build 18 &middot; live filter</span>
     </header>
 
     <div class="stage" id="stage">
@@ -313,7 +336,7 @@
       </div>
     </div>
 
-    <div class="dpad-wrap">
+    <div class="dpad-wrap" id="dpadWrap" style="display:none;">
       <div class="row-label" style="text-align:center; margin-bottom:6px;">INQUADRATURA</div>
       <div class="dpad">
         <button class="dpad-btn dpad-up" id="panUp" aria-label="Su">&#9650;</button>
@@ -352,6 +375,21 @@
       <button class="action-btn secondary" id="uploadBtn">&#9650; CARICA FOTO/VIDEO</button>
     </div>
 
+    <div id="videoEditor" style="display:none;">
+      <div class="row-label">LETTORE VIDEO E TAGLIO</div>
+      <div class="button-row" style="grid-template-columns: 1fr 1fr 1fr; margin-bottom:8px;">
+        <button class="action-btn secondary" id="playPauseBtn">&#9654;</button>
+        <button class="action-btn secondary" id="setInBtn">IMPOSTA INIZIO</button>
+        <button class="action-btn secondary" id="setOutBtn">IMPOSTA FINE</button>
+      </div>
+      <input type="range" id="seekSlider" class="seek-slider" min="0" max="100" step="0.1" value="0">
+      <div class="row-label" style="display:flex; justify-content:space-between; margin-top:6px;">
+        <span id="seekTimeLabel">0:00 / 0:00</span>
+        <span id="trimRangeLabel">taglio: 0:00 - 0:00</span>
+      </div>
+      <button class="action-btn secondary" id="resetTrimBtn" style="width:100%; margin-top:8px; font-size:12px;">RESET TAGLIO (TUTTO IL VIDEO)</button>
+    </div>
+
     <div class="button-row" style="grid-template-columns: 1fr 1fr;">
       <button class="action-btn secondary" id="recordBtn">&#9679; REC</button>
       <button class="action-btn" id="captureBtn">&#9679; SCATTA</button>
@@ -387,7 +425,8 @@
     snes:      [256, 224],
     megadrive: [320, 224],
     c64:       [320, 200],
-    zx:        [256, 192]
+    zx:        [256, 192],
+    vga:       [320, 200]
   };
 
   let BASE_W = 320, BASE_H = 240;
@@ -412,6 +451,8 @@
   let sourceMode = 'camera'; // 'camera' | 'photo'
   let photoImg = null;
   let panX = 0, panY = 0; // manual framing offset for uploaded photo/video, range -1..1
+  let clipDuration = 0, trimStart = 0, trimEnd = 0;
+  let isScrubbing = false;
 
   const PALETTES = {
     color:   { label:'COLORE',  swatch:'linear-gradient(90deg,#ff2e6c,#ffb000,#9bbc0f,#2e8bff)' },
@@ -446,7 +487,8 @@
         '#000000',
         '#0000d7','#d70000','#d700d7','#00d700','#00d7d7','#d7d700','#d7d7d7',
         '#0000ff','#ff0000','#ff00ff','#00ff00','#00ffff','#ffff00','#ffffff'
-      ] }
+      ] },
+    vga:     { label:'VGA', swatch:'linear-gradient(90deg,#000000,#5555ff,#55ff55,#ff5555,#ffff55,#ffffff)' }
   };
 
   const BAYER4 = [
@@ -647,6 +689,14 @@
           data[i]=c[0]; data[i+1]=c[1]; data[i+2]=c[2];
           continue;
         }
+
+        if(key === 'vga'){
+          // Standard VGA Mode 13h: 256-color palette built from a 6x6x6 color
+          // cube (216 colors) plus a grayscale ramp - the classic DOS default.
+          const c = consoleColor(r,g,b, 6, 1.0, 1.0, x, y, 0, 0);
+          data[i]=c[0]; data[i+1]=c[1]; data[i+2]=c[2];
+          continue;
+        }
       }
     }
     return imageData;
@@ -816,8 +866,8 @@
   let recCtx = null;
 
   function stopRecordingIfActive(){
-    if(isRecording && mediaRecorder && mediaRecorder.state !== 'inactive'){
-      mediaRecorder.stop();
+    if(typeof stopRecordingNow === 'function'){
+      stopRecordingNow();
     }
   }
 
@@ -883,6 +933,12 @@
     const img = new Image();
     img.onload = () => {
       stopRecordingIfActive();
+      if(sourceMode === 'clip'){
+        clipVideo.pause();
+        clipVideo.removeAttribute('src');
+        clipVideo.load();
+      }
+      document.getElementById('videoEditor').style.display = 'none';
       photoImg = img;
       sourceMode = 'photo';
       stopStream();
@@ -898,12 +954,25 @@
       }
 
       document.getElementById('hudCam').textContent = 'FOTO';
+      document.getElementById('dpadWrap').style.display = 'flex';
       enterNonCameraMode();
       requestAnimationFrame(drawFrame);
       URL.revokeObjectURL(url);
     };
     img.onerror = () => showError(new Error('image load failed'));
     img.src = url;
+  }
+
+  function formatTime(s){
+    s = Math.max(0, s || 0);
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${String(sec).padStart(2,'0')}`;
+  }
+
+  function updateTrimUI(){
+    document.getElementById('trimRangeLabel').textContent =
+      `taglio: ${formatTime(trimStart)} - ${formatTime(trimEnd)}`;
   }
 
   function loadVideoFile(file, url){
@@ -916,6 +985,17 @@
       active = true;
       panX = 0; panY = 0;
 
+      clipDuration = clipVideo.duration || 0;
+      trimStart = 0;
+      trimEnd = clipDuration;
+      const seekSlider = document.getElementById('seekSlider');
+      seekSlider.min = 0;
+      seekSlider.max = clipDuration;
+      seekSlider.value = 0;
+      updateTrimUI();
+      document.getElementById('videoEditor').style.display = 'block';
+      document.getElementById('playPauseBtn').innerHTML = '&#10074;&#10074;';
+
       const ratio = clipVideo.videoWidth / clipVideo.videoHeight;
       const longSide = 320;
       if(ratio >= 1){
@@ -925,7 +1005,9 @@
       }
 
       document.getElementById('hudCam').textContent = 'VIDEO';
+      document.getElementById('dpadWrap').style.display = 'none';
       enterNonCameraMode();
+      captureBtn.innerHTML = '&#128247; SCATTA FRAME';
       clipVideo.play();
       requestAnimationFrame(drawFrame);
     };
@@ -960,6 +1042,8 @@
     uploadBtn.innerHTML = '&#9650; CARICA FOTO/VIDEO';
     document.getElementById('flipBtn').disabled = false;
     captureBtn.innerHTML = '&#9679; SCATTA';
+    document.getElementById('videoEditor').style.display = 'none';
+    document.getElementById('dpadWrap').style.display = 'none';
     [...aspectRow.children].forEach(b => b.disabled = false);
     if(stream){
       requestAnimationFrame(drawFrame);
@@ -1006,6 +1090,63 @@
   document.getElementById('panRight').addEventListener('click', () => { panX = clampPan(panX + PAN_STEP); });
   document.getElementById('panReset').addEventListener('click', () => { panX = 0; panY = 0; });
 
+  const playPauseBtn = document.getElementById('playPauseBtn');
+  const seekSlider = document.getElementById('seekSlider');
+
+  playPauseBtn.addEventListener('click', () => {
+    if(sourceMode !== 'clip') return;
+    if(clipVideo.paused){
+      clipVideo.play();
+      playPauseBtn.innerHTML = '&#10074;&#10074;';
+    } else {
+      clipVideo.pause();
+      playPauseBtn.innerHTML = '&#9654;';
+    }
+  });
+
+  seekSlider.addEventListener('input', () => {
+    if(sourceMode !== 'clip') return;
+    isScrubbing = true;
+    clipVideo.currentTime = parseFloat(seekSlider.value);
+    document.getElementById('seekTimeLabel').textContent =
+      `${formatTime(clipVideo.currentTime)} / ${formatTime(clipDuration)}`;
+  });
+  seekSlider.addEventListener('change', () => { isScrubbing = false; });
+
+  clipVideo.addEventListener('timeupdate', () => {
+    if(sourceMode !== 'clip') return;
+    if(!isScrubbing){
+      seekSlider.value = clipVideo.currentTime;
+      document.getElementById('seekTimeLabel').textContent =
+        `${formatTime(clipVideo.currentTime)} / ${formatTime(clipDuration)}`;
+    }
+    if(clipVideo.currentTime >= trimEnd - 0.05){
+      if(isRecording){
+        stopRecordingNow();
+      } else {
+        clipVideo.currentTime = trimStart;
+      }
+    }
+  });
+
+  document.getElementById('setInBtn').addEventListener('click', () => {
+    if(sourceMode !== 'clip') return;
+    trimStart = Math.min(clipVideo.currentTime, trimEnd - 0.1);
+    trimStart = Math.max(0, trimStart);
+    updateTrimUI();
+  });
+  document.getElementById('setOutBtn').addEventListener('click', () => {
+    if(sourceMode !== 'clip') return;
+    trimEnd = Math.max(clipVideo.currentTime, trimStart + 0.1);
+    trimEnd = Math.min(clipDuration, trimEnd);
+    updateTrimUI();
+  });
+  document.getElementById('resetTrimBtn').addEventListener('click', () => {
+    trimStart = 0;
+    trimEnd = clipDuration;
+    updateTrimUI();
+  });
+
   pxMinus.addEventListener('click', () => { pixelSize--; updateChunkiness(); });
   pxPlus.addEventListener('click', () => { pixelSize++; updateChunkiness(); });
   refreshPixelStepper();
@@ -1026,11 +1167,31 @@
     paletteRow.appendChild(btn);
   });
 
+  function stopRecordingNow(){
+    if(!isRecording) return;
+    isRecording = false;
+    recordBtn.innerHTML = '&#9679; REC';
+    recordBtn.classList.remove('active');
+    try{
+      if(mediaRecorder && mediaRecorder.state !== 'inactive'){
+        mediaRecorder.stop();
+      }
+    }catch(e){
+      // already stopped/invalid state - nothing more to do
+    }
+  }
+
   const recordBtn = document.getElementById('recordBtn');
   recordBtn.addEventListener('click', () => {
     if(!active) return;
 
     if(!isRecording){
+      if(sourceMode === 'clip'){
+        clipVideo.currentTime = trimStart;
+        clipVideo.play();
+        playPauseBtn.innerHTML = '&#10074;&#10074;';
+      }
+
       recCanvas = document.createElement('canvas');
       recCanvas.width = VW * REC_SCALE;
       recCanvas.height = VH * REC_SCALE;
@@ -1086,10 +1247,7 @@
       recordBtn.innerHTML = '&#9724; STOP';
       recordBtn.classList.add('active');
     } else {
-      isRecording = false;
-      recordBtn.innerHTML = '&#9679; REC';
-      recordBtn.classList.remove('active');
-      mediaRecorder.stop();
+      stopRecordingNow();
     }
   });
 
@@ -1105,7 +1263,7 @@
         </span>
         <video src="${url}" controls playsinline style="width:100%; border:2px solid var(--line);"></video>
         <div><button class="action-btn" id="downloadVideoBtn" style="margin-top:14px; width:100%;">&#128190; SCARICA</button></div>
-        <div><button class="action-btn secondary" id="closeVideoPreviewBtn" style="margin-top:10px; width:100%;">CHIUDI</button></div>
+        <div><button class="action-btn secondary" id="closeVideoPreviewBtn" style="margin-top:10px; width:100%;">&#128465; ELIMINA</button></div>
       </div>`;
     document.getElementById('stage').appendChild(modal);
 
