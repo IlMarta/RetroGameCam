@@ -53,12 +53,13 @@
     width: 100%;
     max-width: 480px;
     margin: 0 auto;
-    aspect-ratio: 4 / 3;
+    height: 0;
+    padding-top: 75%; /* fallback 4:3 ratio; overridden inline via JS per format */
     background: #000;
     clip-path: polygon(16px 0, calc(100% - 16px) 0, 100% 16px, 100% calc(100% - 16px), calc(100% - 16px) 100%, 16px 100%, 0 calc(100% - 16px), 0 16px);
     box-shadow: 0 0 0 3px var(--panel), 0 0 0 6px var(--line), 0 10px 30px rgba(0,0,0,.55);
     overflow: hidden;
-    transition: aspect-ratio .2s ease;
+    transition: padding-top .2s ease;
   }
   #view{
     position:absolute; inset:0;
@@ -242,7 +243,7 @@
 
   <header>
     <span class="title pixelfont">PIXELCAM</span>
-    <span class="sub">build 12 &middot; live filter</span>
+    <span class="sub">build 13 &middot; live filter</span>
   </header>
 
   <div class="stage" id="stage">
@@ -783,7 +784,7 @@
     VW = w; VH = h;
     viewCanvas.width = VW;
     viewCanvas.height = VH;
-    document.getElementById('stage').style.aspectRatio = `${VW} / ${VH}`;
+    document.getElementById('stage').style.paddingTop = ((VH / VW) * 100) + '%';
     if(typeof updateChunkiness === 'function') updateChunkiness();
   }
 
