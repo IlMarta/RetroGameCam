@@ -1,0 +1,1490 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>PIXELCAM</title>
+<style>
+  :root{
+    --bg: #121218;
+    --panel: #1b1b26;
+    --panel-hi: #24242f;
+    --ink: #e9e7f5;
+    --ink-dim: #8d8aa3;
+    --green: #9bbc0f;
+    --green-dim: #4a5f08;
+    --amber: #ffb000;
+    --pink: #ff2e6c;
+    --line: #34324a;
+  }
+  *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body{
+    margin:0; padding:0; height:100%;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: ui-monospace, 'SFMono-Regular', 'Courier New', monospace;
+    overscroll-behavior: none;
+  }
+  body{
+    display:flex; flex-direction:column; align-items:center;
+    min-height:100%;
+    padding: 14px 12px 22px;
+  }
+  .pixelfont{ font-family:'Courier New', ui-monospace, monospace; font-weight:bold; letter-spacing:0.5px; }
+
+  .sticky-preview{
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    width: 100%;
+    max-width: 480px;
+    margin: 0 auto;
+    background: var(--bg);
+    padding-bottom: 10px;
+    box-shadow: 0 8px 12px -6px rgba(0,0,0,.6);
+  }
+  header{
+    width:100%; max-width:480px;
+    display:flex; align-items:baseline; justify-content:space-between;
+    padding: 4px 6px 12px;
+  }
+  header .title{
+    font-size: 15px;
+    color: var(--green);
+    letter-spacing: 1px;
+    text-shadow: 2px 2px 0 var(--green-dim);
+  }
+  header .sub{
+    font-size: 15px;
+    color: var(--ink-dim);
+  }
+
+  .stage{
+    position: relative;
+    width: 100%;
+    max-width: 480px;
+    margin: 0 auto;
+    height: 0;
+    padding-top: 75%; /* fallback 4:3 ratio; overridden inline via JS per format */
+    background: #000;
+    clip-path: polygon(16px 0, calc(100% - 16px) 0, 100% 16px, 100% calc(100% - 16px), calc(100% - 16px) 100%, 16px 100%, 0 calc(100% - 16px), 0 16px);
+    box-shadow: 0 0 0 3px var(--panel), 0 0 0 6px var(--line), 0 10px 30px rgba(0,0,0,.55);
+    overflow: hidden;
+    transition: padding-top .2s ease;
+  }
+  #view{
+    position:absolute; inset:0;
+    width:100%; height:100%;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    display:block;
+  }
+  .scanlines{
+    position:absolute; inset:0;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,0) 0px,
+      rgba(0,0,0,0) 1px,
+      rgba(0,0,0,0.18) 2px,
+      rgba(0,0,0,0.18) 3px
+    );
+    mix-blend-mode: multiply;
+    pointer-events:none;
+  }
+  .vignette{
+    position:absolute; inset:0;
+    box-shadow: inset 0 0 60px 18px rgba(0,0,0,.55);
+    pointer-events:none;
+  }
+  .hud{
+    position:absolute; inset:0; pointer-events:none;
+    font-family:'Courier New', ui-monospace, monospace; font-weight:bold; letter-spacing:0.5px;
+    font-size: 8px;
+    color: var(--green);
+    text-shadow: 1px 1px 0 rgba(0,0,0,.8);
+  }
+  .hud .tl{ position:absolute; top:8px; left:10px; display:flex; align-items:center; gap:6px;}
+  .hud .tr{ position:absolute; top:8px; right:10px; }
+  .hud .bl{ position:absolute; bottom:8px; left:10px; }
+  .hud .br{ position:absolute; bottom:8px; right:10px; }
+  .dot{
+    width:6px; height:6px; border-radius:50%;
+    background: var(--pink);
+    box-shadow: 0 0 4px var(--pink);
+    animation: blink 1.1s steps(2,jump-none) infinite;
+  }
+  @keyframes blink{ 50%{ opacity:.15; } }
+
+  .overlay-msg{
+    position:absolute; inset:0;
+    display:flex; align-items:center; justify-content:center;
+    background: rgba(10,10,14,.92);
+    text-align:center; padding: 24px;
+    font-size: 18px; color: var(--ink);
+    z-index: 5;
+  }
+  .overlay-msg .box{ max-width: 320px; }
+  .overlay-msg .pixelfont{ font-size:11px; color: var(--amber); display:block; margin-bottom:14px; line-height:1.6; }
+  .overlay-msg button{ margin-top: 16px; }
+
+  .deck{
+    width:100%; max-width:480px;
+    margin-top: 14px;
+    background: var(--panel);
+    border: 2px solid var(--line);
+    clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 10px, 100% calc(100% - 10px), calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 10px), 0 10px);
+    padding: 14px 14px 16px;
+  }
+
+  .row-label{
+    font-family:'Courier New', ui-monospace, monospace; font-weight:bold; letter-spacing:0.5px;
+    font-size: 9px;
+    color: var(--ink-dim);
+    margin-bottom: 8px;
+    letter-spacing: .5px;
+  }
+
+  .palette-row{
+    display:grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    margin-bottom: 14px;
+  }
+  .pbtn{
+    font-family:ui-monospace, 'SFMono-Regular', 'Courier New', monospace;
+    font-size: 14px;
+    line-height: 1.05;
+    color: var(--ink);
+    background: var(--panel-hi);
+    border: 2px solid var(--line);
+    padding: 7px 3px;
+    clip-path: polygon(6px 0, calc(100% - 6px) 0, 100% 6px, 100% calc(100% - 6px), calc(100% - 6px) 100%, 6px 100%, 0 calc(100% - 6px), 0 6px);
+    cursor:pointer;
+  }
+  .pbtn.active{
+    background: var(--green-dim);
+    color: var(--green);
+    border-color: var(--green);
+    box-shadow: 0 0 8px rgba(155,188,15,.35) inset;
+  }
+  .pbtn .swatch{
+    display:block;
+    width:100%; height:9px;
+    margin-bottom:5px;
+    border: 1px solid rgba(0,0,0,.4);
+  }
+
+  .slider-row{ margin-bottom: 14px; }
+  .slider-row .row-label{ margin-bottom: 8px; }
+  .stepper{
+    display:flex;
+    align-items:center;
+    gap: 10px;
+  }
+  .stepper-btn{
+    flex: 0 0 auto;
+    width: 52px; height: 44px;
+    font-family:'Courier New', ui-monospace, monospace; font-weight:bold; letter-spacing:0.5px;
+    font-size: 13px;
+    color: #0d0d12;
+    background: var(--amber);
+    border: none;
+    clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 8px, 100% calc(100% - 8px), calc(100% - 8px) 100%, 8px 100%, 0 calc(100% - 8px), 0 8px);
+    cursor:pointer;
+  }
+  .stepper-btn:disabled{ opacity:.35; }
+  .stepper-btn:active{ transform: translateY(1px); }
+  .stepper-value{
+    flex: 1 1 auto;
+    text-align:center;
+    font-family:ui-monospace, 'SFMono-Regular', 'Courier New', monospace;
+    font-size: 30px;
+    color: var(--green);
+    background: #0d0d12;
+    border: 2px solid var(--line);
+    padding: 4px 0;
+  }
+
+  .button-row{
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .dpad-wrap{
+    display:flex;
+    flex-direction: column;
+    align-items:center;
+    margin-bottom: 10px;
+  }
+  .dpad{
+    display:grid;
+    grid-template-columns: repeat(3, 40px);
+    grid-template-rows: repeat(3, 40px);
+    grid-template-areas:
+      ".    up    ."
+      "left center right"
+      ".    down  .";
+    gap: 4px;
+  }
+  .dpad-btn{
+    background: var(--panel-hi);
+    border: 2px solid var(--line);
+    color: var(--amber);
+    font-size: 16px;
+    cursor:pointer;
+    clip-path: polygon(6px 0, calc(100% - 6px) 0, 100% 6px, 100% calc(100% - 6px), calc(100% - 6px) 100%, 6px 100%, 0 calc(100% - 6px), 0 6px);
+  }
+  .dpad-btn:active{ transform: translateY(1px); }
+  .seek-slider{
+    -webkit-appearance:none; appearance:none;
+    width:100%; height: 20px;
+    background: transparent;
+  }
+  .seek-slider::-webkit-slider-runnable-track{
+    height: 8px;
+    background: #0d0d12;
+    border: 2px solid var(--line);
+  }
+  .seek-slider::-webkit-slider-thumb{
+    -webkit-appearance:none;
+    width: 18px; height: 18px;
+    background: var(--amber);
+    border: 2px solid #6b4d00;
+    margin-top: -7px;
+  }
+  .seek-slider::-moz-range-track{
+    height: 8px; background:#0d0d12; border: 2px solid var(--line);
+  }
+  .seek-slider::-moz-range-thumb{
+    width: 16px; height:16px; background: var(--amber); border: 2px solid #6b4d00; border-radius:0;
+  }
+  .dpad-up{ grid-area: up; }
+  .dpad-left{ grid-area: left; }
+  .dpad-right{ grid-area: right; }
+  .dpad-down{ grid-area: down; }
+  .dpad-center{
+    grid-area: center;
+    color: var(--green);
+    font-size: 12px;
+  }
+  .action-btn{
+    font-family:'Courier New', ui-monospace, monospace; font-weight:bold; letter-spacing:0.5px;
+    font-size: 10px;
+    color: #0d0d12;
+    background: var(--green);
+    border: none;
+    padding: 14px 6px;
+    clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 8px, 100% calc(100% - 8px), calc(100% - 8px) 100%, 8px 100%, 0 calc(100% - 8px), 0 8px);
+    cursor:pointer;
+    letter-spacing: .5px;
+  }
+  .action-btn:active{ transform: translateY(1px); }
+  .action-btn.secondary{
+    background: var(--panel-hi);
+    color: var(--ink);
+    border: 2px solid var(--line);
+  }
+  .action-btn.secondary.active{
+    background: var(--green-dim);
+    color: var(--green);
+    border-color: var(--green);
+    box-shadow: 0 0 8px rgba(155,188,15,.35) inset;
+  }
+  .action-btn:disabled{ opacity:.4; }
+
+  .flash{
+    position:fixed; inset:0; background:#fff; opacity:0; pointer-events:none;
+    z-index: 50;
+  }
+  .flash.go{ animation: flashfx .28s ease-out; }
+  @keyframes flashfx{ 0%{opacity:.9;} 100%{opacity:0;} }
+
+  footer{
+    margin-top: 14px;
+    font-size: 14px;
+    color: var(--ink-dim);
+    text-align:center;
+  }
+</style>
+</head>
+<body>
+
+  <div class="sticky-preview">
+    <header>
+      <span class="title pixelfont">PIXELCAM</span>
+      <span class="sub">build 20 &middot; live filter</span>
+    </header>
+
+    <div class="stage" id="stage">
+      <canvas id="view"></canvas>
+      <div class="scanlines"></div>
+      <div class="vignette"></div>
+      <div class="hud">
+        <div class="tl"><span class="dot"></span><span id="hudMode">GAMEBOY</span></div>
+        <div class="tr" id="hudCam">BACK</div>
+        <div class="bl" id="hudPx">PX 8</div>
+        <div class="br" id="hudClock">00:00:00</div>
+      </div>
+      <div class="overlay-msg" id="startOverlay">
+        <div class="box">
+          <span class="pixelfont">TOCCA PER ATTIVARE<br>LA FOTOCAMERA</span>
+          Serve il tuo permesso per usare la camera del telefono.
+          <div><button class="action-btn" id="startBtn" style="margin-top:16px; width:100%;">AVVIA</button></div>
+          <div style="margin-top:14px; font-size:15px; color:var(--ink-dim);">oppure</div>
+          <div><button class="action-btn secondary" id="uploadFromStart" style="margin-top:8px; width:100%;">&#9650; CARICA FOTO/VIDEO</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dpad-wrap" id="dpadWrap" style="display:none;">
+      <div class="row-label" style="text-align:center; margin-bottom:6px;">INQUADRATURA</div>
+      <div class="dpad">
+        <button class="dpad-btn dpad-up" id="panUp" aria-label="Su">&#9650;</button>
+        <button class="dpad-btn dpad-left" id="panLeft" aria-label="Sinistra">&#9664;</button>
+        <button class="dpad-btn dpad-center" id="panReset" aria-label="Centra">&#9679;</button>
+        <button class="dpad-btn dpad-right" id="panRight" aria-label="Destra">&#9654;</button>
+        <button class="dpad-btn dpad-down" id="panDown" aria-label="Giu">&#9660;</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="deck">
+    <div class="button-row" style="margin-bottom:10px; grid-template-columns: 1fr;">
+      <button class="action-btn secondary active" id="audioBtn">&#128266; AUDIO: ON</button>
+    </div>
+
+    <div class="row-label">FORMATO FOTOCAMERA</div>
+    <div class="palette-row" id="aspectRow" style="grid-template-columns: repeat(4, 1fr);"></div>
+
+    <div class="palette-row" id="paletteRow"></div>
+
+    <div class="slider-row">
+      <div class="row-label"><span>DIMENSIONE PIXEL</span></div>
+      <div class="stepper">
+        <button class="stepper-btn" id="pxMinus" aria-label="Diminuisci">&#9664;</button>
+        <span class="stepper-value" id="pxVal">2</span>
+        <button class="stepper-btn" id="pxPlus" aria-label="Aumenta">&#9654;</button>
+      </div>
+      <button class="action-btn secondary" id="nativeLockBtn" style="width:100%; margin-top:8px; font-size:12px;">
+        &#128275; RISOLUZIONE NATIVA: OFF
+      </button>
+    </div>
+
+    <div class="button-row" style="margin-bottom:10px;">
+      <button class="action-btn secondary" id="flipBtn">&#8635; CAMBIA CAM</button>
+      <button class="action-btn secondary" id="uploadBtn">&#9650; CARICA FOTO/VIDEO</button>
+    </div>
+
+    <div id="videoEditor" style="display:none;">
+      <div class="row-label">LETTORE VIDEO E TAGLIO</div>
+      <div class="button-row" style="grid-template-columns: 1fr 1fr 1fr; margin-bottom:8px;">
+        <button class="action-btn secondary" id="playPauseBtn">&#9654;</button>
+        <button class="action-btn secondary" id="setInBtn">IMPOSTA INIZIO</button>
+        <button class="action-btn secondary" id="setOutBtn">IMPOSTA FINE</button>
+      </div>
+      <input type="range" id="seekSlider" class="seek-slider" min="0" max="100" step="0.1" value="0">
+      <div class="row-label" style="display:flex; justify-content:space-between; margin-top:6px;">
+        <span id="seekTimeLabel">0:00 / 0:00</span>
+        <span id="trimRangeLabel">taglio: 0:00 - 0:00</span>
+      </div>
+      <button class="action-btn secondary" id="resetTrimBtn" style="width:100%; margin-top:8px; font-size:12px;">RESET TAGLIO (TUTTO IL VIDEO)</button>
+    </div>
+
+    <div class="button-row" style="grid-template-columns: 1fr 1fr;">
+      <button class="action-btn secondary" id="recordBtn">&#9679; REC</button>
+      <button class="action-btn" id="captureBtn">&#9679; SCATTA</button>
+    </div>
+  </div>
+
+  <footer>Le foto vengono scattate solo sul tuo telefono e non lasciano il dispositivo.</footer>
+
+  <video id="srcVideo" playsinline muted hidden></video>
+  <video id="clipVideo" playsinline muted loop hidden></video>
+  <canvas id="work" hidden></canvas>
+  <input type="file" id="fileInput" accept="image/*,video/*" hidden>
+  <div class="flash" id="flash"></div>
+
+<script>
+(function(){
+  const ASPECTS = {
+    '4:3':  [320, 240],
+    '1:1':  [300, 300],
+    '16:9': [320, 180],
+    '9:16': [180, 320]
+  };
+  // Real native pixel-grid resolutions of each system. When one of these
+  // palettes is active, the rendering grid is capped to the actual hardware
+  // resolution (letterboxed to fit the chosen frame) instead of using the
+  // generic 1-4 pixel-size stepper, which only applies to non-hardware modes.
+  const NATIVE_RES = {
+    gameboy:   [160, 144],
+    gbc:       [160, 144],
+    gba:       [240, 160],
+    nes:       [256, 240],
+    nes2:      [256, 240],
+    cga:       [320, 200],
+    sms:       [256, 192],
+    snes:      [256, 224],
+    megadrive: [320, 224],
+    c64:       [320, 200],
+    zx:        [256, 192],
+    vga:       [320, 200]
+  };
+
+  let BASE_W = 320, BASE_H = 240;
+  let VW = BASE_W, VH = BASE_H;
+
+  const video = document.getElementById('srcVideo');
+  const viewCanvas = document.getElementById('view');
+  const viewCtx = viewCanvas.getContext('2d', { alpha:false });
+  const workCanvas = document.getElementById('work');
+  const workCtx = workCanvas.getContext('2d', { willReadFrequently:true });
+
+  viewCanvas.width = VW;
+  viewCanvas.height = VH;
+  viewCtx.imageSmoothingEnabled = false;
+
+  let stream = null;
+  let facingMode = 'environment';
+  let pixelSize = 2;       // block size in virtual px: 1 (finest) .. 4 (chunkiest)
+  let paletteKey = 'gameboy';
+  let nativeResLock = false; // when off (default), fills the whole frame; ON forces real hardware pixel limits
+  let active = false;
+  let sourceMode = 'camera'; // 'camera' | 'photo'
+  let photoImg = null;
+  let panX = 0, panY = 0; // manual framing offset for uploaded photo/video, range -1..1
+  let clipDuration = 0, trimStart = 0, trimEnd = 0;
+  let isScrubbing = false;
+
+  const PALETTES = {
+    color:   { label:'COLORE',  swatch:'linear-gradient(90deg,#ff2e6c,#ffb000,#9bbc0f,#2e8bff)' },
+    gameboy: { label:'GAMEBOY', swatch:'linear-gradient(90deg,#0f380f,#306230,#8bac0f,#9bbc0f)', colors:['#0f380f','#306230','#8bac0f','#9bbc0f'] },
+    gbc:     { label:'GBC', swatch:'linear-gradient(90deg,#3a2fa0,#e6396b,#f7b733,#37c46b)' },
+    gba:     { label:'GBA', swatch:'linear-gradient(90deg,#4b3f8f,#8f7fd6,#c9c2ef,#efece0)' },
+    nes:     { label:'NES',     swatch:'linear-gradient(90deg,#000000,#0058f8,#f83800,#f8d800,#00b800,#f878f8)', colors:[
+        '#000000','#545454','#a4a4a4','#eceeec',
+        '#004488','#0058f8','#3cbcfc','#a4e4fc',
+        '#001884','#0038f8','#4488fc','#b8b8f8',
+        '#440064','#5800e4','#a878f8','#d8b8f8',
+        '#5c0030','#a800a8','#f878f8','#f8b8f8',
+        '#630010','#e40058','#f85898','#f8b8b8',
+        '#4c0700','#f83800','#f87858','#f8d8a8',
+        '#3c1c00','#e45c10','#f8a044','#fce0a8',
+        '#2c3000','#ac7c00','#f8b800','#f8d878',
+        '#003c00','#00b800','#b8f818','#d8f878',
+        '#003c00','#00a800','#58d854','#b8f8b8',
+        '#003c22','#00a844','#58f898','#b8f8d8',
+        '#00325c','#008888','#00e8d8','#00fcfc',
+        '#202020','#787878','#787878','#f8d8f8'
+      ] },
+    nes2:    { label:'NES2',    swatch:'linear-gradient(90deg,#000000,#0078f8,#f83800,#f8d800,#00b800,#f878f8)' },
+    cga:     { label:'CGA',     swatch:'linear-gradient(90deg,#000000,#55ffff,#ff55ff,#ffffff)', colors:['#000000','#55ffff','#ff55ff','#ffffff'] },
+    bw:      { label:'B/N',     swatch:'linear-gradient(90deg,#000000,#555555,#aaaaaa,#ffffff)' },
+    sms:     { label:'SMS',     swatch:'linear-gradient(90deg,#0000aa,#00aa00,#aa0000,#aaaa00)' },
+    snes:    { label:'SNES',    swatch:'linear-gradient(90deg,#5a4fc2,#c24f8f,#4fb8c2,#e0c24f)' },
+    megadrive:{ label:'MEGA DRIVE', swatch:'linear-gradient(90deg,#001a4d,#0044aa,#00aacc,#ffcc00)' },
+    c64:     { label:'C64',     swatch:'linear-gradient(90deg,#40318d,#70a4b2,#813338,#9ae29b)', colors:[
+        '#000000','#ffffff','#813338','#75cec8','#8e3c97','#56ac4d','#2e2c9b','#edf171',
+        '#8e5029','#553800','#c46c71','#4a4a4a','#7b7b7b','#a9ff9f','#706deb','#b2b2b2'
+      ] },
+    zx:      { label:'ZX SPECTRUM', swatch:'linear-gradient(90deg,#0000d7,#d70000,#00d700,#d7d700)', colors:[
+        '#000000',
+        '#0000d7','#d70000','#d700d7','#00d700','#00d7d7','#d7d700','#d7d7d7',
+        '#0000ff','#ff0000','#ff00ff','#00ff00','#00ffff','#ffff00','#ffffff'
+      ] },
+    vga:     { label:'VGA', swatch:'linear-gradient(90deg,#000000,#5555ff,#55ff55,#ff5555,#ffff55,#ffffff)' }
+  };
+
+  const BAYER4 = [
+    [0,8,2,10],
+    [12,4,14,6],
+    [3,11,1,9],
+    [15,7,13,5]
+  ];
+
+  function hexToRgb(hex){
+    const v = parseInt(hex.slice(1),16);
+    return [ (v>>16)&255, (v>>8)&255, v&255 ];
+  }
+
+  const nesRgb = PALETTES.nes.colors.map(hexToRgb);
+  const cgaRgb = PALETTES.cga.colors.map(hexToRgb);
+  const gbRgb  = PALETTES.gameboy.colors.map(hexToRgb);
+  const c64Rgb = PALETTES.c64.colors.map(hexToRgb);
+  const zxRgb  = PALETTES.zx.colors.map(hexToRgb);
+
+  function clamp255(v){ return v<0?0:(v>255?255:v); }
+
+  function nearestColor(r,g,b,list){
+    let best = list[0], bestDist = Infinity;
+    for(const c of list){
+      const dr=r-c[0], dg=g-c[1], db=b-c[2];
+      const d = dr*dr+dg*dg+db*db;
+      if(d < bestDist){ bestDist = d; best = c; }
+    }
+    return best;
+  }
+
+  // Ordered (Bayer) dithering before nearest-color lookup: breaks up flat
+  // color bands so limited hardware palettes keep more of the original detail.
+  function ditheredNearestColor(r,g,b,x,y,list,strength){
+    const off = (BAYER4[y%4][x%4]-7.5) * strength;
+    return nearestColor(clamp255(r+off), clamp255(g+off), clamp255(b+off), list);
+  }
+
+  // Emulates a console's real color depth: each channel is posterized to the
+  // number of levels the hardware could actually address, with a small
+  // saturation/contrast push to match that system's characteristic look.
+  function consoleColor(r,g,b, levels, satMul, contrastMul, x, y, ditherStrength, blueBoost){
+    const lum = 0.299*r + 0.587*g + 0.114*b;
+    let rr = lum + (r-lum)*satMul;
+    let gg = lum + (g-lum)*satMul;
+    let bb = lum + (b-lum)*satMul;
+    rr = 128 + (rr-128)*contrastMul;
+    gg = 128 + (gg-128)*contrastMul;
+    bb = 128 + (bb-128)*contrastMul;
+    if(blueBoost) bb += blueBoost;
+    if(ditherStrength){
+      const off = (BAYER4[y%4][x%4]-7.5) * ditherStrength;
+      rr += off; gg += off; bb += off;
+    }
+    const step = 255/(levels-1);
+    rr = Math.round(Math.round(clamp255(rr)/step)*step);
+    gg = Math.round(Math.round(clamp255(gg)/step)*step);
+    bb = Math.round(Math.round(clamp255(bb)/step)*step);
+    return [clamp255(rr), clamp255(gg), clamp255(bb)];
+  }
+
+  function nearestColorIndex(r,g,b,list){
+    let best = 0, bestDist = Infinity;
+    for(let i=0;i<list.length;i++){
+      const c = list[i];
+      const dr=r-c[0], dg=g-c[1], db=b-c[2];
+      const d = dr*dr+dg*dg+db*db;
+      if(d < bestDist){ bestDist = d; best = i; }
+    }
+    return best;
+  }
+
+  // Authentic NES background rendering: the PPU's attribute table assigns one
+  // subpalette to each 16x16-pixel block, so every pixel inside that block is
+  // forced to share at most 4 colors from the 56-entry system palette. This
+  // reproduces that real hardware constraint (and its characteristic
+  // "attribute clash" look) instead of freely quantizing every pixel.
+  function applyNesAuthentic(imageData, list){
+    const data = imageData.data;
+    const w = imageData.width, h = imageData.height;
+    const ATTR_COLS = 16, ATTR_ROWS = 15;
+    const blockW = Math.max(1, Math.ceil(w/ATTR_COLS));
+    const blockH = Math.max(1, Math.ceil(h/ATTR_ROWS));
+    const idxGrid = new Int16Array(w*h);
+
+    for(let y=0; y<h; y++){
+      for(let x=0; x<w; x++){
+        const i=(y*w+x)*4;
+        idxGrid[y*w+x] = nearestColorIndex(data[i], data[i+1], data[i+2], list);
+      }
+    }
+
+    for(let by=0; by<h; by+=blockH){
+      const byEnd = Math.min(by+blockH, h);
+      for(let bx=0; bx<w; bx+=blockW){
+        const bxEnd = Math.min(bx+blockW, w);
+        const freq = new Map();
+        for(let y=by; y<byEnd; y++){
+          for(let x=bx; x<bxEnd; x++){
+            const idx = idxGrid[y*w+x];
+            freq.set(idx, (freq.get(idx)||0)+1);
+          }
+        }
+        const subpalette = [...freq.entries()]
+          .sort((a,b) => b[1]-a[1])
+          .slice(0,4)
+          .map(e => list[e[0]]);
+
+        for(let y=by; y<byEnd; y++){
+          for(let x=bx; x<bxEnd; x++){
+            const i=(y*w+x)*4;
+            const c = nearestColor(data[i], data[i+1], data[i+2], subpalette);
+            data[i]=c[0]; data[i+1]=c[1]; data[i+2]=c[2];
+          }
+        }
+      }
+    }
+    return imageData;
+  }
+
+  function applyPalette(imageData, key){
+    if(key === 'nes'){
+      return applyNesAuthentic(imageData, nesRgb);
+    }
+
+    const data = imageData.data;
+    const w = imageData.width;
+    for(let y=0; y<imageData.height; y++){
+      for(let x=0; x<w; x++){
+        const i = (y*w+x)*4;
+        const r = data[i], g = data[i+1], b = data[i+2];
+
+        if(key === 'color'){
+          continue;
+        }
+
+        const lum = 0.299*r + 0.587*g + 0.114*b;
+
+        if(key === 'bw'){
+          const threshold = (BAYER4[y%4][x%4]+0.5)/16 * 255;
+          const v = lum > threshold ? 255 : 0;
+          data[i]=v; data[i+1]=v; data[i+2]=v;
+          continue;
+        }
+
+        if(key === 'gameboy'){
+          const dith = (BAYER4[y%4][x%4]-7.5) * 6;
+          let l = lum + dith;
+          l = Math.max(0, Math.min(255, l));
+          const idx = Math.min(3, Math.floor(l/64));
+          const c = gbRgb[idx];
+          data[i]=c[0]; data[i+1]=c[1]; data[i+2]=c[2];
+          continue;
+        }
+
+        if(key === 'gbc'){
+          // Game Boy Color: 15-bit color addressable, but only a handful of
+          // small palettes (4 colors each) visible on screen at once.
+          const c = consoleColor(r,g,b, 16, 1.12, 1.04, x, y, 0, 0);
+          data[i]=c[0]; data[i+1]=c[1]; data[i+2]=c[2];
+          continue;
+        }
+
+        if(key === 'gba'){
+          // Game Boy Advance: 15-bit color (5 bits/32 levels per channel),
+          // same depth as SNES, on a dimmer non-backlit screen.
+          const c = consoleColor(r,g,b, 32, 1.0, 0.96, x, y, 0, 0);
+          data[i]=c[0]; data[i+1]=c[1]; data[i+2]=c[2];
+          continue;
+        }
+
+        if(key === 'cga'){
+          const c = ditheredNearestColor(r,g,b,x,y, cgaRgb, 12);
+          data[i]=c[0]; data[i+1]=c[1]; data[i+2]=c[2];
+          continue;
+        }
+
+        if(key === 'nes2'){
+          const c = ditheredNearestColor(r,g,b,x,y, nesRgb, 10);
+          data[i]=c[0]; data[i+1]=c[1]; data[i+2]=c[2];
+          continue;
+        }
+
+        if(key === 'c64'){
+          const c = ditheredNearestColor(r,g,b,x,y, c64Rgb, 10);
+          data[i]=c[0]; data[i+1]=c[1]; data[i+2]=c[2];
+          continue;
+        }
+
+        if(key === 'zx'){
+          const c = ditheredNearestColor(r,g,b,x,y, zxRgb, 10);
+          data[i]=c[0]; data[i+1]=c[1]; data[i+2]=c[2];
+          continue;
+        }
+
+        if(key === 'sms'){
+          // Sega Master System: 6-bit color, 2 bits (4 levels) per channel
+          const c = consoleColor(r,g,b, 4, 1.08, 1.0, x, y, 0, 0);
+          data[i]=c[0]; data[i+1]=c[1]; data[i+2]=c[2];
+          continue;
+        }
+
+        if(key === 'megadrive'){
+          // Sega Mega Drive/Genesis: 9-bit color, 3 bits (8 levels) per channel
+          const c = consoleColor(r,g,b, 8, 1.18, 1.1, x, y, 0, 0);
+          data[i]=c[0]; data[i+1]=c[1]; data[i+2]=c[2];
+          continue;
+        }
+
+        if(key === 'snes'){
+          // Super Nintendo: 15-bit color, 5 bits (32 levels) per channel
+          const c = consoleColor(r,g,b, 32, 1.05, 1.03, x, y, 0, 0);
+          data[i]=c[0]; data[i+1]=c[1]; data[i+2]=c[2];
+          continue;
+        }
+
+        if(key === 'vga'){
+          // Standard VGA Mode 13h: 256-color palette built from a 6x6x6 color
+          // cube (216 colors) plus a grayscale ramp - the classic DOS default.
+          const c = consoleColor(r,g,b, 6, 1.0, 1.0, x, y, 0, 0);
+          data[i]=c[0]; data[i+1]=c[1]; data[i+2]=c[2];
+          continue;
+        }
+      }
+    }
+    return imageData;
+  }
+
+  function coverRect(sw, sh, dw, dh, panX, panY){
+    panX = panX || 0; panY = panY || 0;
+    const srcRatio = sw/sh, dstRatio = dw/dh;
+    let cw = sw, ch = sh;
+    if(srcRatio > dstRatio){ cw = sh*dstRatio; } else { ch = sw/dstRatio; }
+    const slackX = sw - cw, slackY = sh - ch;
+    const sx = (slackX/2) + (slackX/2) * panX;
+    const sy = (slackY/2) + (slackY/2) * panY;
+    return { sx, sy, sw:cw, sh:ch };
+  }
+
+  function computeGridLayout(){
+    const native = nativeResLock ? NATIVE_RES[paletteKey] : null;
+    if(native){
+      const [nw, nh] = native;
+      const nativeAspect = nw / nh;
+      const frameAspect = VW / VH;
+      let drawW, drawH;
+      if(nativeAspect > frameAspect){
+        drawW = VW; drawH = Math.max(1, Math.round(VW / nativeAspect));
+      } else {
+        drawH = VH; drawW = Math.max(1, Math.round(VH * nativeAspect));
+      }
+      return {
+        gw: nw, gh: nh,
+        drawW, drawH,
+        offX: Math.round((VW - drawW) / 2),
+        offY: Math.round((VH - drawH) / 2),
+        letterboxed: true
+      };
+    }
+    const gw = Math.max(1, Math.round(VW / pixelSize));
+    const gh = Math.max(1, Math.round(VH / pixelSize));
+    return { gw, gh, drawW: VW, drawH: VH, offX: 0, offY: 0, letterboxed: false };
+  }
+
+  function drawFrame(){
+    if(!active) return;
+
+    const layout = computeGridLayout();
+    const gw = layout.gw, gh = layout.gh;
+    if(workCanvas.width !== gw) workCanvas.width = gw;
+    if(workCanvas.height !== gh) workCanvas.height = gh;
+    workCtx.imageSmoothingEnabled = true;
+
+    if(sourceMode === 'camera' && video.readyState >= 2 && video.videoWidth){
+      const r = coverRect(video.videoWidth, video.videoHeight, gw, gh);
+      if(facingMode === 'user'){
+        workCtx.save();
+        workCtx.translate(gw,0);
+        workCtx.scale(-1,1);
+        workCtx.drawImage(video, r.sx, r.sy, r.sw, r.sh, 0, 0, gw, gh);
+        workCtx.restore();
+      } else {
+        workCtx.drawImage(video, r.sx, r.sy, r.sw, r.sh, 0, 0, gw, gh);
+      }
+    } else if(sourceMode === 'photo' && photoImg){
+      const r = coverRect(photoImg.naturalWidth, photoImg.naturalHeight, gw, gh, panX, panY);
+      workCtx.drawImage(photoImg, r.sx, r.sy, r.sw, r.sh, 0, 0, gw, gh);
+    } else if(sourceMode === 'clip' && clipVideo.readyState >= 2 && clipVideo.videoWidth){
+      const r = coverRect(clipVideo.videoWidth, clipVideo.videoHeight, gw, gh, panX, panY);
+      workCtx.drawImage(clipVideo, r.sx, r.sy, r.sw, r.sh, 0, 0, gw, gh);
+    } else {
+      requestAnimationFrame(drawFrame);
+      return;
+    }
+
+    const imgData = workCtx.getImageData(0,0,gw,gh);
+    applyPalette(imgData, paletteKey);
+    workCtx.putImageData(imgData, 0, 0);
+
+    viewCtx.imageSmoothingEnabled = false;
+    if(layout.letterboxed){
+      viewCtx.fillStyle = '#000';
+      viewCtx.fillRect(0, 0, VW, VH);
+    }
+    viewCtx.drawImage(workCanvas, 0, 0, gw, gh, layout.offX, layout.offY, layout.drawW, layout.drawH);
+
+    if(isRecording && recCanvas){
+      recCtx.imageSmoothingEnabled = false;
+      recCtx.fillStyle = '#000';
+      recCtx.fillRect(0, 0, recCanvas.width, recCanvas.height);
+      recCtx.drawImage(
+        workCanvas, 0, 0, gw, gh,
+        layout.offX*REC_SCALE, layout.offY*REC_SCALE,
+        layout.drawW*REC_SCALE, layout.drawH*REC_SCALE
+      );
+    }
+
+    requestAnimationFrame(drawFrame);
+  }
+
+  async function startCamera(mode){
+    stopStream();
+    const videoConstraints = { facingMode: { ideal: mode }, width:{ideal:1280}, height:{ideal:960} };
+    try{
+      try{
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: videoConstraints,
+          audio: !noAudioMode
+        });
+      }catch(errWithAudio){
+        // Mic might be denied/unavailable while camera is fine — retry video-only.
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: videoConstraints,
+          audio: false
+        });
+      }
+      video.srcObject = stream;
+      await video.play();
+      facingMode = mode;
+      sourceMode = 'camera';
+      photoImg = null;
+      applyResolution(BASE_W, BASE_H);
+      document.getElementById('hudCam').textContent = mode === 'user' ? 'FRONT' : 'BACK';
+      document.getElementById('uploadBtn').innerHTML = '&#9650; CARICA FOTO/VIDEO';
+      const fbCam = document.getElementById('flipBtn');
+      fbCam.disabled = false;
+      fbCam.innerHTML = '&#8635; CAMBIA CAM';
+      document.getElementById('captureBtn').innerHTML = '&#9679; SCATTA';
+      active = true;
+      document.getElementById('startOverlay').style.display = 'none';
+      requestAnimationFrame(drawFrame);
+    }catch(err){
+      showError(err);
+    }
+  }
+
+  function stopStream(){
+    if(stream){
+      stream.getTracks().forEach(t => t.stop());
+      stream = null;
+    }
+  }
+
+  function showError(err){
+    const overlay = document.getElementById('startOverlay');
+    overlay.style.display = 'flex';
+    const detail = err && (err.name || err.message)
+      ? `${err.name || ''} ${err.message || ''}`.trim()
+      : 'Errore sconosciuto';
+    overlay.innerHTML = `<div class="box">
+      <span class="pixelfont" style="color:#ff2e6c;">CAMERA NON DISPONIBILE</span>
+      Controlla di aver concesso il permesso alla fotocamera nel browser. Se sei in un'anteprima incorporata, prova ad aprire questa pagina in una scheda o finestra separata.
+      <div style="margin-top:10px; font-size:13px; color:var(--ink-dim); word-break:break-word;">Dettaglio tecnico: ${detail}</div>
+      <div><button class="action-btn" id="retryBtn" style="margin-top:16px; width:100%;">RIPROVA</button></div>
+    </div>`;
+    document.getElementById('retryBtn').addEventListener('click', () => startCamera(facingMode));
+  }
+
+  const audioBtn = document.getElementById('audioBtn');
+  audioBtn.addEventListener('click', () => {
+    noAudioMode = !noAudioMode;
+    audioBtn.innerHTML = noAudioMode ? '&#128263; AUDIO: OFF' : '&#128266; AUDIO: ON';
+    audioBtn.classList.toggle('active', !noAudioMode);
+  });
+
+  const REC_SCALE = 2;
+  let noAudioMode = false;
+
+  // Per-system "retro audio" character: bit depth, sample-and-hold rate
+  // (lower = more lo-fi), a lowpass/highpass to narrow the frequency range,
+  // and a soft-clip distortion amount. Applied only while recording.
+  const AUDIO_PROFILES = {
+    gameboy:   { bits:4, sampleHold:6, lowpass:4000, highpass:100, distortion:0.30, mono:true },
+    gbc:       { bits:4, sampleHold:5, lowpass:4500, highpass:80,  distortion:0.25, mono:true },
+    gba:       { bits:8, sampleHold:2, lowpass:8000,               distortion:0.10, mono:false },
+    nes:       { bits:6, sampleHold:5, lowpass:5000, highpass:100, distortion:0.30, mono:true },
+    nes2:      { bits:6, sampleHold:5, lowpass:5000, highpass:100, distortion:0.30, mono:true },
+    snes:      { bits:8, sampleHold:2, lowpass:9000,               distortion:0.10, mono:false },
+    sms:       { bits:6, sampleHold:4, lowpass:5500, highpass:90,  distortion:0.25, mono:true },
+    megadrive: { bits:8, sampleHold:3, lowpass:7000,               distortion:0.20, mono:false },
+    c64:       { bits:8, sampleHold:3, lowpass:6000, highpass:60,  distortion:0.35, mono:true },
+    zx:        { bits:1, sampleHold:8, lowpass:3000, highpass:200, distortion:0.60, mono:true },
+    cga:       { bits:1, sampleHold:8, lowpass:3000, highpass:200, distortion:0.50, mono:true },
+    vga:       { bits:8, sampleHold:2, lowpass:10000,              distortion:0.10, mono:false }
+    // 'color' and 'bw' are intentionally absent: plain passthrough audio
+  };
+
+  let sharedAudioCtx = null;
+  let activeAudioNodes = [];
+  function getAudioCtx(){
+    if(!sharedAudioCtx){
+      sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if(sharedAudioCtx.state === 'suspended'){ sharedAudioCtx.resume(); }
+    return sharedAudioCtx;
+  }
+
+  // Builds a lo-fi "retro console" audio chain from a raw MediaStream and
+  // returns a new processed MediaStream to feed into the recording.
+  function buildRetroAudioStream(rawStream, profile){
+    const ctx = getAudioCtx();
+    const nodes = [];
+    const src = ctx.createMediaStreamSource(rawStream);
+    nodes.push(src);
+    let node = src;
+
+    if(!profile){
+      const dest = ctx.createMediaStreamDestination();
+      node.connect(dest);
+      nodes.push(dest);
+      return { stream: dest.stream, nodes };
+    }
+
+    if(profile.highpass){
+      const hp = ctx.createBiquadFilter();
+      hp.type = 'highpass';
+      hp.frequency.value = profile.highpass;
+      node.connect(hp); node = hp; nodes.push(hp);
+    }
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = profile.lowpass;
+    node.connect(lp); node = lp; nodes.push(lp);
+
+    const channels = profile.mono ? 1 : 2;
+    const bufferSize = 1024;
+    const crusher = ctx.createScriptProcessor(bufferSize, channels, channels);
+    const levels = Math.pow(2, profile.bits);
+    let holdCounter = 0, heldL = 0, heldR = 0;
+    crusher.onaudioprocess = (e) => {
+      const inL = e.inputBuffer.getChannelData(0);
+      const outL = e.outputBuffer.getChannelData(0);
+      const inR = channels > 1 ? e.inputBuffer.getChannelData(1) : inL;
+      const outR = channels > 1 ? e.outputBuffer.getChannelData(1) : outL;
+      for(let i=0; i<inL.length; i++){
+        if(holdCounter % profile.sampleHold === 0){
+          heldL = Math.round(inL[i]*levels)/levels;
+          heldR = channels > 1 ? Math.round(inR[i]*levels)/levels : heldL;
+        }
+        holdCounter++;
+        let vL = heldL, vR = heldR;
+        if(profile.distortion){
+          const k = 1 + profile.distortion*5;
+          vL = Math.tanh(vL*k); vR = Math.tanh(vR*k);
+        }
+        outL[i] = vL;
+        if(channels > 1) outR[i] = vR;
+      }
+    };
+    node.connect(crusher); node = crusher; nodes.push(crusher);
+
+    const dest = ctx.createMediaStreamDestination();
+    node.connect(dest);
+    nodes.push(dest);
+    return { stream: dest.stream, nodes };
+  }
+
+  function cleanupAudioNodes(){
+    activeAudioNodes.forEach(n => { try{ n.disconnect(); }catch(e){} });
+    activeAudioNodes = [];
+  }
+  let isRecording = false;
+  let mediaRecorder = null;
+  let recChunks = [];
+  let recCanvas = null;
+  let recCtx = null;
+
+  function stopRecordingIfActive(){
+    if(typeof stopRecordingNow === 'function'){
+      stopRecordingNow();
+    }
+  }
+
+  document.getElementById('startBtn').addEventListener('click', () => startCamera(facingMode));
+  document.getElementById('uploadFromStart').addEventListener('click', () => fileInputEl.click());
+
+  document.getElementById('flipBtn').addEventListener('click', () => {
+    if(sourceMode !== 'camera'){
+      fileInputEl.click();
+      return;
+    }
+    const next = facingMode === 'environment' ? 'user' : 'environment';
+    startCamera(next);
+  });
+
+  const uploadBtn = document.getElementById('uploadBtn');
+  const fileInputEl = document.getElementById('fileInput');
+  const captureBtn = document.getElementById('captureBtn');
+  const clipVideo = document.getElementById('clipVideo');
+  let clipUrl = null;
+
+  uploadBtn.addEventListener('click', () => {
+    if(sourceMode !== 'camera'){
+      returnToCamera();
+    } else {
+      fileInputEl.click();
+    }
+  });
+
+  function applyResolution(w, h){
+    VW = w; VH = h;
+    viewCanvas.width = VW;
+    viewCanvas.height = VH;
+    document.getElementById('stage').style.paddingTop = ((VH / VW) * 100) + '%';
+    if(typeof updateChunkiness === 'function') updateChunkiness();
+  }
+
+  let currentAspectKey = '4:3';
+  const aspectRow = document.getElementById('aspectRow');
+  Object.keys(ASPECTS).forEach(key => {
+    const btn = document.createElement('button');
+    btn.className = 'pbtn' + (key === currentAspectKey ? ' active' : '');
+    btn.textContent = key;
+    btn.addEventListener('click', () => {
+      currentAspectKey = key;
+      const [w, h] = ASPECTS[key];
+      BASE_W = w; BASE_H = h;
+      [...aspectRow.children].forEach(c => c.classList.remove('active'));
+      btn.classList.add('active');
+      if(sourceMode === 'camera'){
+        applyResolution(BASE_W, BASE_H);
+      }
+    });
+    aspectRow.appendChild(btn);
+  });
+
+  function enterNonCameraMode(){
+    document.getElementById('startOverlay').style.display = 'none';
+    uploadBtn.innerHTML = '&#8617; TORNA A LIVE';
+    const fb = document.getElementById('flipBtn');
+    fb.disabled = false;
+    fb.innerHTML = '&#128260; CAMBIA FILE';
+    captureBtn.innerHTML = '&#128190; SALVA';
+    [...aspectRow.children].forEach(b => b.disabled = true);
+  }
+
+  function loadImageFile(file, url){
+    const img = new Image();
+    img.onload = () => {
+      stopRecordingIfActive();
+      if(sourceMode === 'clip'){
+        clipVideo.pause();
+        clipVideo.removeAttribute('src');
+        clipVideo.load();
+      }
+      document.getElementById('videoEditor').style.display = 'none';
+      photoImg = img;
+      sourceMode = 'photo';
+      stopStream();
+      active = true;
+      panX = 0; panY = 0;
+
+      const ratio = img.naturalWidth / img.naturalHeight;
+      const longSide = 320;
+      if(ratio >= 1){
+        applyResolution(longSide, Math.max(60, Math.round(longSide/ratio)));
+      } else {
+        applyResolution(Math.max(60, Math.round(longSide*ratio)), longSide);
+      }
+
+      document.getElementById('hudCam').textContent = 'FOTO';
+      document.getElementById('dpadWrap').style.display = 'flex';
+      enterNonCameraMode();
+      requestAnimationFrame(drawFrame);
+      URL.revokeObjectURL(url);
+    };
+    img.onerror = () => showError(new Error('image load failed'));
+    img.src = url;
+  }
+
+  function formatTime(s){
+    s = Math.max(0, s || 0);
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${String(sec).padStart(2,'0')}`;
+  }
+
+  function updateTrimUI(){
+    document.getElementById('trimRangeLabel').textContent =
+      `taglio: ${formatTime(trimStart)} - ${formatTime(trimEnd)}`;
+  }
+
+  function loadVideoFile(file, url){
+    stopRecordingIfActive();
+    clipVideo.src = url;
+    clipVideo.onloadedmetadata = () => {
+      photoImg = null;
+      sourceMode = 'clip';
+      stopStream();
+      active = true;
+      panX = 0; panY = 0;
+
+      clipDuration = clipVideo.duration || 0;
+      trimStart = 0;
+      trimEnd = clipDuration;
+      const seekSlider = document.getElementById('seekSlider');
+      seekSlider.min = 0;
+      seekSlider.max = clipDuration;
+      seekSlider.value = 0;
+      updateTrimUI();
+      document.getElementById('videoEditor').style.display = 'block';
+      document.getElementById('playPauseBtn').innerHTML = '&#10074;&#10074;';
+
+      const ratio = clipVideo.videoWidth / clipVideo.videoHeight;
+      const longSide = 320;
+      if(ratio >= 1){
+        applyResolution(longSide, Math.max(60, Math.round(longSide/ratio)));
+      } else {
+        applyResolution(Math.max(60, Math.round(longSide*ratio)), longSide);
+      }
+
+      document.getElementById('hudCam').textContent = 'VIDEO';
+      document.getElementById('dpadWrap').style.display = 'none';
+      enterNonCameraMode();
+      captureBtn.innerHTML = '&#128247; SCATTA FRAME';
+      clipVideo.play();
+      requestAnimationFrame(drawFrame);
+    };
+    clipVideo.onerror = () => showError(new Error('video load failed'));
+  }
+
+  fileInputEl.addEventListener('change', (e) => {
+    const file = e.target.files && e.target.files[0];
+    if(!file) return;
+    if(clipUrl){ URL.revokeObjectURL(clipUrl); clipUrl = null; }
+    const url = URL.createObjectURL(file);
+    if(file.type.startsWith('video/')){
+      clipUrl = url;
+      loadVideoFile(file, url);
+    } else {
+      loadImageFile(file, url);
+    }
+    fileInputEl.value = '';
+  });
+
+  function returnToCamera(){
+    stopRecordingIfActive();
+    photoImg = null;
+    if(sourceMode === 'clip'){
+      clipVideo.pause();
+      clipVideo.removeAttribute('src');
+      clipVideo.load();
+    }
+    if(clipUrl){ URL.revokeObjectURL(clipUrl); clipUrl = null; }
+    sourceMode = 'camera';
+    applyResolution(BASE_W, BASE_H);
+    uploadBtn.innerHTML = '&#9650; CARICA FOTO/VIDEO';
+    const fbReturn = document.getElementById('flipBtn');
+    fbReturn.disabled = false;
+    fbReturn.innerHTML = '&#8635; CAMBIA CAM';
+    captureBtn.innerHTML = '&#9679; SCATTA';
+    document.getElementById('videoEditor').style.display = 'none';
+    document.getElementById('dpadWrap').style.display = 'none';
+    [...aspectRow.children].forEach(b => b.disabled = false);
+    if(stream){
+      requestAnimationFrame(drawFrame);
+    } else {
+      startCamera(facingMode);
+    }
+  }
+
+  const pxMinus = document.getElementById('pxMinus');
+  const pxPlus = document.getElementById('pxPlus');
+  function updateChunkiness(){
+    pixelSize = Math.max(1, Math.min(4, pixelSize));
+    document.getElementById('pxVal').textContent = pixelSize;
+    document.getElementById('hudPx').textContent = 'PX ' + pixelSize;
+    pxMinus.disabled = pixelSize <= 1;
+    pxPlus.disabled = pixelSize >= 4;
+  }
+  function refreshPixelStepper(){
+    const native = nativeResLock ? NATIVE_RES[paletteKey] : null;
+    if(native){
+      document.getElementById('pxVal').textContent = `${native[0]}\u00d7${native[1]} NATIVO`;
+      document.getElementById('hudPx').textContent = `${native[0]}x${native[1]}`;
+      pxMinus.disabled = true;
+      pxPlus.disabled = true;
+    } else {
+      updateChunkiness();
+    }
+  }
+  const nativeLockBtn = document.getElementById('nativeLockBtn');
+  nativeLockBtn.addEventListener('click', () => {
+    nativeResLock = !nativeResLock;
+    nativeLockBtn.innerHTML = nativeResLock
+      ? '&#128274; RISOLUZIONE NATIVA: ON'
+      : '&#128275; RISOLUZIONE NATIVA: OFF';
+    nativeLockBtn.classList.toggle('active', nativeResLock);
+    refreshPixelStepper();
+  });
+
+  const PAN_STEP = 0.15;
+  function clampPan(v){ return Math.max(-1, Math.min(1, v)); }
+  document.getElementById('panUp').addEventListener('click', () => { panY = clampPan(panY - PAN_STEP); });
+  document.getElementById('panDown').addEventListener('click', () => { panY = clampPan(panY + PAN_STEP); });
+  document.getElementById('panLeft').addEventListener('click', () => { panX = clampPan(panX - PAN_STEP); });
+  document.getElementById('panRight').addEventListener('click', () => { panX = clampPan(panX + PAN_STEP); });
+  document.getElementById('panReset').addEventListener('click', () => { panX = 0; panY = 0; });
+
+  const playPauseBtn = document.getElementById('playPauseBtn');
+  const seekSlider = document.getElementById('seekSlider');
+
+  playPauseBtn.addEventListener('click', () => {
+    if(sourceMode !== 'clip') return;
+    if(clipVideo.paused){
+      clipVideo.play();
+      playPauseBtn.innerHTML = '&#10074;&#10074;';
+    } else {
+      clipVideo.pause();
+      playPauseBtn.innerHTML = '&#9654;';
+    }
+  });
+
+  seekSlider.addEventListener('input', () => {
+    if(sourceMode !== 'clip') return;
+    isScrubbing = true;
+    clipVideo.currentTime = parseFloat(seekSlider.value);
+    document.getElementById('seekTimeLabel').textContent =
+      `${formatTime(clipVideo.currentTime)} / ${formatTime(clipDuration)}`;
+  });
+  seekSlider.addEventListener('change', () => { isScrubbing = false; });
+
+  clipVideo.addEventListener('timeupdate', () => {
+    if(sourceMode !== 'clip') return;
+    if(!isScrubbing){
+      seekSlider.value = clipVideo.currentTime;
+      document.getElementById('seekTimeLabel').textContent =
+        `${formatTime(clipVideo.currentTime)} / ${formatTime(clipDuration)}`;
+    }
+    if(clipVideo.currentTime >= trimEnd - 0.05){
+      if(isRecording){
+        stopRecordingNow();
+      } else {
+        clipVideo.currentTime = trimStart;
+      }
+    }
+  });
+
+  document.getElementById('setInBtn').addEventListener('click', () => {
+    if(sourceMode !== 'clip') return;
+    trimStart = Math.min(clipVideo.currentTime, trimEnd - 0.1);
+    trimStart = Math.max(0, trimStart);
+    updateTrimUI();
+  });
+  document.getElementById('setOutBtn').addEventListener('click', () => {
+    if(sourceMode !== 'clip') return;
+    trimEnd = Math.max(clipVideo.currentTime, trimStart + 0.1);
+    trimEnd = Math.min(clipDuration, trimEnd);
+    updateTrimUI();
+  });
+  document.getElementById('resetTrimBtn').addEventListener('click', () => {
+    trimStart = 0;
+    trimEnd = clipDuration;
+    updateTrimUI();
+  });
+
+  pxMinus.addEventListener('click', () => { pixelSize--; updateChunkiness(); });
+  pxPlus.addEventListener('click', () => { pixelSize++; updateChunkiness(); });
+  refreshPixelStepper();
+
+  const paletteRow = document.getElementById('paletteRow');
+  Object.keys(PALETTES).forEach(key => {
+    const p = PALETTES[key];
+    const btn = document.createElement('button');
+    btn.className = 'pbtn' + (key === paletteKey ? ' active' : '');
+    btn.innerHTML = `<span class="swatch" style="background:${p.swatch}"></span>${p.label}`;
+    btn.addEventListener('click', () => {
+      paletteKey = key;
+      document.getElementById('hudMode').textContent = p.label;
+      [...paletteRow.children].forEach(c => c.classList.remove('active'));
+      btn.classList.add('active');
+      refreshPixelStepper();
+    });
+    paletteRow.appendChild(btn);
+  });
+
+  function stopRecordingNow(){
+    if(!isRecording) return;
+    isRecording = false;
+    recordBtn.innerHTML = '&#9679; REC';
+    recordBtn.classList.remove('active');
+    try{
+      if(mediaRecorder && mediaRecorder.state !== 'inactive'){
+        mediaRecorder.stop();
+      }
+    }catch(e){
+      // already stopped/invalid state - nothing more to do
+    }
+  }
+
+  const recordBtn = document.getElementById('recordBtn');
+  recordBtn.addEventListener('click', () => {
+    if(!active) return;
+
+    if(!isRecording){
+      if(sourceMode === 'clip'){
+        clipVideo.currentTime = trimStart;
+        clipVideo.play();
+        playPauseBtn.innerHTML = '&#10074;&#10074;';
+      }
+
+      recCanvas = document.createElement('canvas');
+      recCanvas.width = VW * REC_SCALE;
+      recCanvas.height = VH * REC_SCALE;
+      recCtx = recCanvas.getContext('2d');
+
+      let mimeType = 'video/webm;codecs=vp9';
+      if(!(window.MediaRecorder && MediaRecorder.isTypeSupported(mimeType))){
+        mimeType = 'video/webm';
+      }
+      if(!window.MediaRecorder || !MediaRecorder.isTypeSupported(mimeType)){
+        showError(new Error('MediaRecorder non supportato su questo browser'));
+        return;
+      }
+
+      const camStream = recCanvas.captureStream(24);
+
+      if(!noAudioMode){
+        let rawAudioStream = null;
+        try{
+          if(sourceMode === 'camera' && stream && stream.getAudioTracks().length){
+            rawAudioStream = stream;
+          } else if(sourceMode === 'clip'){
+            const grab = clipVideo.captureStream ? clipVideo.captureStream.bind(clipVideo)
+                        : (clipVideo.mozCaptureStream ? clipVideo.mozCaptureStream.bind(clipVideo) : null);
+            if(grab){
+              const clipStream = grab();
+              if(clipStream.getAudioTracks().length) rawAudioStream = clipStream;
+            }
+          }
+        }catch(e){ rawAudioStream = null; }
+
+        if(rawAudioStream){
+          try{
+            const profile = AUDIO_PROFILES[paletteKey] || null;
+            const { stream: processedStream, nodes } = buildRetroAudioStream(rawAudioStream, profile);
+            activeAudioNodes = nodes;
+            processedStream.getAudioTracks().forEach(t => camStream.addTrack(t));
+          }catch(e){
+            // Web Audio processing failed for some reason - fall back to raw audio
+            rawAudioStream.getAudioTracks().forEach(t => camStream.addTrack(t));
+          }
+        }
+      }
+
+      recChunks = [];
+      try{
+        mediaRecorder = new MediaRecorder(camStream, { mimeType });
+      }catch(e){
+        showError(e);
+        return;
+      }
+      mediaRecorder.ondataavailable = (e) => {
+        if(e.data && e.data.size) recChunks.push(e.data);
+      };
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(recChunks, { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        showVideoSavePreview(url);
+        recCanvas = null;
+        recCtx = null;
+        cleanupAudioNodes();
+      };
+      mediaRecorder.start();
+      isRecording = true;
+      recordBtn.innerHTML = '&#9724; STOP';
+      recordBtn.classList.add('active');
+    } else {
+      stopRecordingNow();
+    }
+  });
+
+  function showVideoSavePreview(url){
+    const modal = document.createElement('div');
+    modal.className = 'overlay-msg';
+    modal.style.zIndex = '30';
+    modal.style.flexDirection = 'column';
+    modal.innerHTML = `
+      <div class="box" style="max-width:280px;">
+        <span class="pixelfont" style="font-size:10px; display:block; margin-bottom:12px; color:var(--amber);">
+          VIDEO PRONTO
+        </span>
+        <video src="${url}" controls playsinline style="width:100%; border:2px solid var(--line);"></video>
+        <div><button class="action-btn" id="downloadVideoBtn" style="margin-top:14px; width:100%;">&#128190; SCARICA</button></div>
+        <div><button class="action-btn secondary" id="closeVideoPreviewBtn" style="margin-top:10px; width:100%;">&#128465; ELIMINA</button></div>
+      </div>`;
+    document.getElementById('stage').appendChild(modal);
+
+    document.getElementById('downloadVideoBtn').addEventListener('click', () => {
+      const a = document.createElement('a');
+      const ts = new Date().toISOString().replace(/[:.]/g,'-');
+      a.href = url;
+      a.download = `pixelcam-${ts}.webm`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    });
+    document.getElementById('closeVideoPreviewBtn').addEventListener('click', () => {
+      modal.remove();
+      URL.revokeObjectURL(url);
+    });
+  }
+
+  document.getElementById('captureBtn').addEventListener('click', () => {
+    if(!active) return;
+    const scale = 4;
+    const layout = computeGridLayout();
+    const out = document.createElement('canvas');
+    out.width = VW*scale;
+    out.height = VH*scale;
+    const octx = out.getContext('2d');
+    octx.imageSmoothingEnabled = false;
+    if(layout.letterboxed){
+      octx.fillStyle = '#000';
+      octx.fillRect(0, 0, out.width, out.height);
+    }
+    octx.drawImage(
+      workCanvas, 0, 0, workCanvas.width, workCanvas.height,
+      layout.offX*scale, layout.offY*scale, layout.drawW*scale, layout.drawH*scale
+    );
+
+    const flash = document.getElementById('flash');
+    flash.classList.remove('go'); void flash.offsetWidth; flash.classList.add('go');
+
+    const dataUrl = out.toDataURL('image/png');
+    const ts = new Date().toISOString().replace(/[:.]/g,'-');
+    const filename = `pixelcam-${ts}.png`;
+
+    let autoDownloadWorked = false;
+    try{
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      autoDownloadWorked = true;
+    }catch(e){
+      autoDownloadWorked = false;
+    }
+
+    showSavePreview(dataUrl, autoDownloadWorked);
+  });
+
+  function showSavePreview(dataUrl, autoDownloadWorked){
+    const modal = document.createElement('div');
+    modal.className = 'overlay-msg';
+    modal.style.zIndex = '30';
+    modal.style.flexDirection = 'column';
+    modal.innerHTML = `
+      <div class="box" style="max-width:280px;">
+        <span class="pixelfont" style="font-size:10px; display:block; margin-bottom:12px; color:var(--amber);">
+          ${autoDownloadWorked ? 'SALVATA (controlla i download)' : 'TIENI PREMUTO PER SALVARE'}
+        </span>
+        <img src="${dataUrl}" style="width:100%; image-rendering:pixelated; border:2px solid var(--line);">
+        <div><button class="action-btn secondary" id="closePreviewBtn" style="margin-top:14px; width:100%;">CHIUDI</button></div>
+      </div>`;
+    document.getElementById('stage').appendChild(modal);
+    document.getElementById('closePreviewBtn').addEventListener('click', () => modal.remove());
+  }
+
+  function tickClock(){
+    const d = new Date();
+    const pad = n => String(n).padStart(2,'0');
+    document.getElementById('hudClock').textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
+  setInterval(tickClock, 1000);
+  tickClock();
+
+  window.addEventListener('beforeunload', stopStream);
+})();
+</script>
+</body>
+</html>
