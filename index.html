@@ -312,7 +312,7 @@
   <div class="sticky-preview">
     <header>
       <span class="title pixelfont">PIXELCAM</span>
-      <span class="sub">build 18 &middot; live filter</span>
+      <span class="sub">build 20 &middot; live filter</span>
     </header>
 
     <div class="stage" id="stage">
@@ -418,6 +418,8 @@
   // generic 1-4 pixel-size stepper, which only applies to non-hardware modes.
   const NATIVE_RES = {
     gameboy:   [160, 144],
+    gbc:       [160, 144],
+    gba:       [240, 160],
     nes:       [256, 240],
     nes2:      [256, 240],
     cga:       [320, 200],
@@ -457,6 +459,8 @@
   const PALETTES = {
     color:   { label:'COLORE',  swatch:'linear-gradient(90deg,#ff2e6c,#ffb000,#9bbc0f,#2e8bff)' },
     gameboy: { label:'GAMEBOY', swatch:'linear-gradient(90deg,#0f380f,#306230,#8bac0f,#9bbc0f)', colors:['#0f380f','#306230','#8bac0f','#9bbc0f'] },
+    gbc:     { label:'GBC', swatch:'linear-gradient(90deg,#3a2fa0,#e6396b,#f7b733,#37c46b)' },
+    gba:     { label:'GBA', swatch:'linear-gradient(90deg,#4b3f8f,#8f7fd6,#c9c2ef,#efece0)' },
     nes:     { label:'NES',     swatch:'linear-gradient(90deg,#000000,#0058f8,#f83800,#f8d800,#00b800,#f878f8)', colors:[
         '#000000','#545454','#a4a4a4','#eceeec',
         '#004488','#0058f8','#3cbcfc','#a4e4fc',
@@ -645,6 +649,22 @@
           continue;
         }
 
+        if(key === 'gbc'){
+          // Game Boy Color: 15-bit color addressable, but only a handful of
+          // small palettes (4 colors each) visible on screen at once.
+          const c = consoleColor(r,g,b, 16, 1.12, 1.04, x, y, 0, 0);
+          data[i]=c[0]; data[i+1]=c[1]; data[i+2]=c[2];
+          continue;
+        }
+
+        if(key === 'gba'){
+          // Game Boy Advance: 15-bit color (5 bits/32 levels per channel),
+          // same depth as SNES, on a dimmer non-backlit screen.
+          const c = consoleColor(r,g,b, 32, 1.0, 0.96, x, y, 0, 0);
+          data[i]=c[0]; data[i+1]=c[1]; data[i+2]=c[2];
+          continue;
+        }
+
         if(key === 'cga'){
           const c = ditheredNearestColor(r,g,b,x,y, cgaRgb, 12);
           data[i]=c[0]; data[i+1]=c[1]; data[i+2]=c[2];
@@ -818,7 +838,9 @@
       applyResolution(BASE_W, BASE_H);
       document.getElementById('hudCam').textContent = mode === 'user' ? 'FRONT' : 'BACK';
       document.getElementById('uploadBtn').innerHTML = '&#9650; CARICA FOTO/VIDEO';
-      document.getElementById('flipBtn').disabled = false;
+      const fbCam = document.getElementById('flipBtn');
+      fbCam.disabled = false;
+      fbCam.innerHTML = '&#8635; CAMBIA CAM';
       document.getElementById('captureBtn').innerHTML = '&#9679; SCATTA';
       active = true;
       document.getElementById('startOverlay').style.display = 'none';
@@ -859,6 +881,100 @@
 
   const REC_SCALE = 2;
   let noAudioMode = false;
+
+  // Per-system "retro audio" character: bit depth, sample-and-hold rate
+  // (lower = more lo-fi), a lowpass/highpass to narrow the frequency range,
+  // and a soft-clip distortion amount. Applied only while recording.
+  const AUDIO_PROFILES = {
+    gameboy:   { bits:4, sampleHold:6, lowpass:4000, highpass:100, distortion:0.30, mono:true },
+    gbc:       { bits:4, sampleHold:5, lowpass:4500, highpass:80,  distortion:0.25, mono:true },
+    gba:       { bits:8, sampleHold:2, lowpass:8000,               distortion:0.10, mono:false },
+    nes:       { bits:6, sampleHold:5, lowpass:5000, highpass:100, distortion:0.30, mono:true },
+    nes2:      { bits:6, sampleHold:5, lowpass:5000, highpass:100, distortion:0.30, mono:true },
+    snes:      { bits:8, sampleHold:2, lowpass:9000,               distortion:0.10, mono:false },
+    sms:       { bits:6, sampleHold:4, lowpass:5500, highpass:90,  distortion:0.25, mono:true },
+    megadrive: { bits:8, sampleHold:3, lowpass:7000,               distortion:0.20, mono:false },
+    c64:       { bits:8, sampleHold:3, lowpass:6000, highpass:60,  distortion:0.35, mono:true },
+    zx:        { bits:1, sampleHold:8, lowpass:3000, highpass:200, distortion:0.60, mono:true },
+    cga:       { bits:1, sampleHold:8, lowpass:3000, highpass:200, distortion:0.50, mono:true },
+    vga:       { bits:8, sampleHold:2, lowpass:10000,              distortion:0.10, mono:false }
+    // 'color' and 'bw' are intentionally absent: plain passthrough audio
+  };
+
+  let sharedAudioCtx = null;
+  let activeAudioNodes = [];
+  function getAudioCtx(){
+    if(!sharedAudioCtx){
+      sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if(sharedAudioCtx.state === 'suspended'){ sharedAudioCtx.resume(); }
+    return sharedAudioCtx;
+  }
+
+  // Builds a lo-fi "retro console" audio chain from a raw MediaStream and
+  // returns a new processed MediaStream to feed into the recording.
+  function buildRetroAudioStream(rawStream, profile){
+    const ctx = getAudioCtx();
+    const nodes = [];
+    const src = ctx.createMediaStreamSource(rawStream);
+    nodes.push(src);
+    let node = src;
+
+    if(!profile){
+      const dest = ctx.createMediaStreamDestination();
+      node.connect(dest);
+      nodes.push(dest);
+      return { stream: dest.stream, nodes };
+    }
+
+    if(profile.highpass){
+      const hp = ctx.createBiquadFilter();
+      hp.type = 'highpass';
+      hp.frequency.value = profile.highpass;
+      node.connect(hp); node = hp; nodes.push(hp);
+    }
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = profile.lowpass;
+    node.connect(lp); node = lp; nodes.push(lp);
+
+    const channels = profile.mono ? 1 : 2;
+    const bufferSize = 1024;
+    const crusher = ctx.createScriptProcessor(bufferSize, channels, channels);
+    const levels = Math.pow(2, profile.bits);
+    let holdCounter = 0, heldL = 0, heldR = 0;
+    crusher.onaudioprocess = (e) => {
+      const inL = e.inputBuffer.getChannelData(0);
+      const outL = e.outputBuffer.getChannelData(0);
+      const inR = channels > 1 ? e.inputBuffer.getChannelData(1) : inL;
+      const outR = channels > 1 ? e.outputBuffer.getChannelData(1) : outL;
+      for(let i=0; i<inL.length; i++){
+        if(holdCounter % profile.sampleHold === 0){
+          heldL = Math.round(inL[i]*levels)/levels;
+          heldR = channels > 1 ? Math.round(inR[i]*levels)/levels : heldL;
+        }
+        holdCounter++;
+        let vL = heldL, vR = heldR;
+        if(profile.distortion){
+          const k = 1 + profile.distortion*5;
+          vL = Math.tanh(vL*k); vR = Math.tanh(vR*k);
+        }
+        outL[i] = vL;
+        if(channels > 1) outR[i] = vR;
+      }
+    };
+    node.connect(crusher); node = crusher; nodes.push(crusher);
+
+    const dest = ctx.createMediaStreamDestination();
+    node.connect(dest);
+    nodes.push(dest);
+    return { stream: dest.stream, nodes };
+  }
+
+  function cleanupAudioNodes(){
+    activeAudioNodes.forEach(n => { try{ n.disconnect(); }catch(e){} });
+    activeAudioNodes = [];
+  }
   let isRecording = false;
   let mediaRecorder = null;
   let recChunks = [];
@@ -875,7 +991,10 @@
   document.getElementById('uploadFromStart').addEventListener('click', () => fileInputEl.click());
 
   document.getElementById('flipBtn').addEventListener('click', () => {
-    if(sourceMode !== 'camera') return;
+    if(sourceMode !== 'camera'){
+      fileInputEl.click();
+      return;
+    }
     const next = facingMode === 'environment' ? 'user' : 'environment';
     startCamera(next);
   });
@@ -924,7 +1043,9 @@
   function enterNonCameraMode(){
     document.getElementById('startOverlay').style.display = 'none';
     uploadBtn.innerHTML = '&#8617; TORNA A LIVE';
-    document.getElementById('flipBtn').disabled = true;
+    const fb = document.getElementById('flipBtn');
+    fb.disabled = false;
+    fb.innerHTML = '&#128260; CAMBIA FILE';
     captureBtn.innerHTML = '&#128190; SALVA';
     [...aspectRow.children].forEach(b => b.disabled = true);
   }
@@ -1040,7 +1161,9 @@
     sourceMode = 'camera';
     applyResolution(BASE_W, BASE_H);
     uploadBtn.innerHTML = '&#9650; CARICA FOTO/VIDEO';
-    document.getElementById('flipBtn').disabled = false;
+    const fbReturn = document.getElementById('flipBtn');
+    fbReturn.disabled = false;
+    fbReturn.innerHTML = '&#8635; CAMBIA CAM';
     captureBtn.innerHTML = '&#9679; SCATTA';
     document.getElementById('videoEditor').style.display = 'none';
     document.getElementById('dpadWrap').style.display = 'none';
@@ -1209,20 +1332,31 @@
       const camStream = recCanvas.captureStream(24);
 
       if(!noAudioMode){
-        let audioTracks = [];
+        let rawAudioStream = null;
         try{
-          if(sourceMode === 'camera' && stream){
-            audioTracks = stream.getAudioTracks();
+          if(sourceMode === 'camera' && stream && stream.getAudioTracks().length){
+            rawAudioStream = stream;
           } else if(sourceMode === 'clip'){
             const grab = clipVideo.captureStream ? clipVideo.captureStream.bind(clipVideo)
                         : (clipVideo.mozCaptureStream ? clipVideo.mozCaptureStream.bind(clipVideo) : null);
             if(grab){
               const clipStream = grab();
-              audioTracks = clipStream.getAudioTracks();
+              if(clipStream.getAudioTracks().length) rawAudioStream = clipStream;
             }
           }
-        }catch(e){ audioTracks = []; }
-        audioTracks.forEach(t => camStream.addTrack(t));
+        }catch(e){ rawAudioStream = null; }
+
+        if(rawAudioStream){
+          try{
+            const profile = AUDIO_PROFILES[paletteKey] || null;
+            const { stream: processedStream, nodes } = buildRetroAudioStream(rawAudioStream, profile);
+            activeAudioNodes = nodes;
+            processedStream.getAudioTracks().forEach(t => camStream.addTrack(t));
+          }catch(e){
+            // Web Audio processing failed for some reason - fall back to raw audio
+            rawAudioStream.getAudioTracks().forEach(t => camStream.addTrack(t));
+          }
+        }
       }
 
       recChunks = [];
@@ -1241,6 +1375,7 @@
         showVideoSavePreview(url);
         recCanvas = null;
         recCtx = null;
+        cleanupAudioNodes();
       };
       mediaRecorder.start();
       isRecording = true;
